@@ -2,7 +2,7 @@
 # ==============================================================================
 # QNX MPU6050 Live Telemetry Publisher via MQTT Protocol
 # Reads MPU6050 I2C sensor on QNX Pi (/dev/i2c1) and publishes live JSON
-# telemetry to an MQTT Broker (e.g. Host PC or Public Broker).
+# telemetry to an MQTT Broker.
 # ==============================================================================
 
 import time
@@ -93,13 +93,21 @@ def main():
     print(f" MQTT Topic         : {MQTT_TOPIC}")
     print("==========================================================================")
 
-    client = mqtt.Client(client_id="QNX_Pi_MPU_Publisher")
+    # Use modern Callback API version if available
+    try:
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="QNX_Pi_MPU_Publisher")
+    except AttributeError:
+        client = mqtt.Client(client_id="QNX_Pi_MPU_Publisher")
+
     try:
         client.connect(MQTT_BROKER, MQTT_PORT, 60)
         client.loop_start()
         print("[MQTT] Connected to MQTT Broker successfully!")
     except Exception as e:
         print(f"[MQTT ERROR] Failed to connect to broker {MQTT_BROKER}: {e}")
+        print("\n💡 NOTE: MQTT requires an MQTT broker (like Mosquitto) running on port 1883.")
+        print("   If you are running 'run_mpu_twin.py' on Host PC, use direct UDP publisher instead:")
+        print("   -> python3 mpu_publisher.py 10.12.2.121")
         return
 
     count = 0
@@ -116,7 +124,7 @@ def main():
                 f"\r[MQTT TX #{count:06d}] Topic: {MQTT_TOPIC} | Pitch: {payload['pitch']:6.2f}° | Roll: {payload['roll']:6.2f}°"
             )
             sys.stdout.flush()
-            time.sleep(0.02)  # 50 Hz MQTT stream rate
+            time.sleep(0.02)
 
     except KeyboardInterrupt:
         print("\n\n[SHUTDOWN] MQTT Publisher closed.")
