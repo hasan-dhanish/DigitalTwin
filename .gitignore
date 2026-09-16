@@ -1,0 +1,13 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary Excel lock files
+~$*.xlsx
+
+# Environment & IDE
+.vscode/
+.idea/
+*.swp
+*.tmp

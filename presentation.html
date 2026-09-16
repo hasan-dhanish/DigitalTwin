@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>City Digital Twin Real-Time Synchronization Engine | QNX</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #040203;
+      --red-primary: #e50914;
+      --red-glow: rgba(229, 9, 20, 0.45);
+      --red-dark: #80050b;
+      --text-white: #ffffff;
+      --text-muted: #a0a0a0;
+      --font-heading: 'Anton', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--bg-dark);
+      color: var(--text-white);
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      position: relative;
+    }
+
+    /* Ambient Red Flares in background */
+    .ambient-flare {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .flare-top-right {
+      top: -100px;
+      right: -100px;
+      width: 450px;
+      height: 450px;
+      background: radial-gradient(circle, var(--red-glow) 0%, transparent 70%);
+    }
+
+    .flare-bottom-left {
+      bottom: -150px;
+      left: -150px;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(229, 9, 20, 0.25) 0%, transparent 70%);
+    }
+
+    .flare-center {
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 650px;
+      height: 420px;
+      background: radial-gradient(ellipse, rgba(255, 30, 0, 0.35) 0%, transparent 65%);
+    }
+
+    /* Top Corner Triangle Badge */
+    .corner-triangle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 45px;
+      height: 45px;
+      background: var(--red-primary);
+      clip-path: polygon(100% 0, 0 0, 100% 100%);
+      z-index: 100;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      height: 70px;
+      padding: 0 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      color: var(--red-primary);
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+    }
+
+    .brand-text {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-white);
+      text-transform: uppercase;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 36px;
+      margin-right: 40px;
+    }
+
+    .nav-link {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .nav-link:hover, .nav-link.active {
+      color: var(--text-white);
+    }
+
+    /* Presentation Slides Wrapper */
+    .slides-wrapper {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: calc(100vh - 130px);
+      z-index: 10;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 40px 80px;
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.97);
+      transition: opacity 0.4s ease, transform 0.4s ease, visibility 0.4s;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
+    }
+
+    /* Slide Fixed Slide Number Badge (Bottom Right) */
+    .slide-badge-fixed {
+      position: absolute;
+      bottom: 25px;
+      right: 0;
+      background: var(--red-primary);
+      color: var(--text-white);
+      font-weight: 700;
+      font-size: 14px;
+      font-family: var(--font-mono);
+      padding: 8px 20px;
+      z-index: 100;
+    }
+
+    /* Red Accent Title Decor Line */
+    .red-accent-bar {
+      width: 45px;
+      height: 4px;
+      background: var(--red-primary);
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-family: var(--font-heading);
+      font-size: 46px;
+      letter-spacing: 1px;
+      line-height: 1.05;
+      text-transform: uppercase;
+      color: var(--text-white);
+      margin-bottom: 16px;
+    }
+
+    /* Red Action Button */
+    .btn-red {
+      background: var(--red-primary);
+      color: var(--text-white);
+      border: none;
+      padding: 12px 28px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+      display: inline-block;
+      margin-top: 18px;
+    }
+
+    .btn-red:hover {
+      background: #ff1e27;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(229, 9, 20, 0.5);
+    }
+
+    /* Grid Layouts */
+    .grid-50-50 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 50px;
+      align-items: center;
+    }
+
+    /* SLIDE 1 */
+    .hero-center {
+      text-align: center;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .hero-title-giant {
+      font-family: var(--font-heading);
+      font-size: 88px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-white);
+      line-height: 0.95;
+      text-shadow: 0 0 30px rgba(0,0,0,0.8);
+      margin-bottom: 16px;
+    }
+
+    .hero-tagline {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      letter-spacing: 5px;
+      color: var(--red-primary);
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      font-weight: 700;
+    }
+
+    .bullet-list-clean {
+      list-style: none;
+      text-align: left;
+      max-width: 850px;
+      margin: 0 auto;
+    }
+
+    .bullet-list-clean li {
+      position: relative;
+      padding-left: 24px;
+      margin-bottom: 10px;
+      font-size: 15px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .bullet-list-clean li::before {
+      content: '■';
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--red-primary);
+      font-size: 12px;
+    }
+
+    .bullet-list-clean strong {
+      color: var(--text-white);
+    }
+
+    /* Skewed Image Frames */
+    .skew-frame {
+      position: relative;
+      width: 100%;
+      height: 380px;
+      overflow: hidden;
+      border: 1px solid rgba(229, 9, 20, 0.4);
+      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+      transform: skewX(-8deg);
+      border-radius: 4px;
+    }
+
+    .skew-frame img {
+      width: 120%;
+      height: 100%;
+      object-fit: cover;
+      transform: skewX(8deg) scale(1.1);
+    }
+
+    /* Stacked Polygon Overlapping Frames */
+    .stacked-frames {
+      position: relative;
+      height: 400px;
+      width: 100%;
+    }
+
+    .stacked-frame-1 {
+      position: absolute;
+      top: 20px;
+      left: 0;
+      width: 65%;
+      height: 320px;
+      overflow: hidden;
+      transform: skewX(-6deg);
+      border: 1px solid var(--red-primary);
+      z-index: 2;
+    }
+
+    .stacked-frame-2 {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 65%;
+      height: 360px;
+      overflow: hidden;
+      transform: skewX(-6deg);
+      border: 1px solid rgba(229, 9, 20, 0.5);
+      z-index: 1;
+    }
+
+    .stacked-frame-1 img, .stacked-frame-2 img {
+      width: 130%;
+      height: 100%;
+      object-fit: cover;
+      transform: skewX(6deg) scale(1.1);
+    }
+
+    /* Numbered Rows & Badges */
+    .red-num-badge {
+      width: 28px;
+      height: 28px;
+      background: var(--red-primary);
+      color: var(--text-white);
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .row-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .row-item p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .row-item strong {
+      color: var(--text-white);
+      display: block;
+      font-size: 14px;
+      margin-bottom: 2px;
+    }
+
+    /* Polygon Cut Frame */
+    .poly-frame {
+      width: 100%;
+      height: 400px;
+      clip-path: polygon(25% 0%, 100% 0%, 75% 100%, 0% 100%);
+      overflow: hidden;
+      border: 1px solid var(--red-primary);
+    }
+
+    .poly-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Dedicated Table Styling for Slide 4 */
+    .hw-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 14px;
+    }
+
+    .hw-table th {
+      background: var(--red-primary);
+      color: var(--text-white);
+      text-align: left;
+      padding: 10px 14px;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    .hw-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .hw-table tr:hover td {
+      background: rgba(229, 9, 20, 0.12);
+      color: var(--text-white);
+    }
+
+    /* Bottom Control Bar */
+    footer {
+      height: 60px;
+      padding: 0 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 50;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(4, 2, 3, 0.9);
+    }
+
+    .foot-text {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .foot-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn-nav {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-white);
+      padding: 6px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-nav:hover {
+      background: var(--red-primary);
+      border-color: var(--red-primary);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background Glowing Red Ambient Flares -->
+  <div class="ambient-flare flare-top-right"></div>
+  <div class="ambient-flare flare-bottom-left"></div>
+  <div class="ambient-flare flare-center"></div>
+
+  <!-- Top Right Red Triangle Accent -->
+  <div class="corner-triangle"></div>
+
+  <!-- Top Navigation Bar -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#E50914"/>
+          <path d="M2 17L12 22L22 17" stroke="#E50914" stroke-width="2" stroke-linecap="round"/>
+          <path d="M2 12L12 17L22 12" stroke="#E50914" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="brand-text">QNX REAL-TIME ENGINE</div>
+    </div>
+
+    <div class="nav-links">
+      <span class="nav-link active" onclick="goToSlide(1)">Problem</span>
+      <span class="nav-link" onclick="goToSlide(2)">Architecture</span>
+      <span class="nav-link" onclick="goToSlide(3)">Mechanism</span>
+      <span class="nav-link" onclick="goToSlide(4)">Hardware List</span>
+      <span class="nav-link" onclick="goToSlide(5)">Demo & Results</span>
+    </div>
+  </header>
+
+  <!-- Main Slide Viewport -->
+  <div class="slides-wrapper">
+
+    <!-- ================= SLIDE 1: PROBLEM & OBJECTIVE ================= -->
+    <section class="slide active" id="slide-1">
+      <div class="hero-center">
+        <h1 class="hero-title-giant">CITY DIGITAL TWIN</h1>
+        <div class="hero-tagline">REAL-TIME SYNCHRONIZATION ENGINE • TARGET: RASPBERRY PI 4/5 RUNNING QNX</div>
+
+        <ul class="bullet-list-clean">
+          <li>A digital twin maintains a <strong>live virtual representation of city assets</strong>.</li>
+          <li>Sensor and subsystem data can arrive at <strong>different rates and with variable delays</strong>.</li>
+          <li>Stale or delayed data can make the digital twin inaccurate.</li>
+          <li><strong>Goal:</strong> Build a QNX-based real-time synchronization engine that keeps simulated city subsystems synchronized with their digital representation.</li>
+          <li><strong>Monitor:</strong> Data freshness | Synchronization latency | Deadline violations | Communication failures</li>
+        </ul>
+      </div>
+      <div class="slide-badge-fixed">01</div>
+    </section>
+
+    <!-- ================= SLIDE 2: SYSTEM ARCHITECTURE ================= -->
+    <section class="slide" id="slide-2">
+      <div class="grid-50-50">
+        <!-- Left Side Skewed Frame -->
+        <div class="skew-frame">
+          <img src="img_vr_interface.jpg" alt="Architecture HUD">
+        </div>
+
+        <!-- Right Side Architecture Flow -->
+        <div>
+          <div class="red-accent-bar"></div>
+          <h2 class="section-title">SYSTEM ARCHITECTURE</h2>
+
+          <div style="font-family: var(--font-mono); font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="background: rgba(255,255,255,0.04); border-left: 3px solid var(--text-muted); padding: 8px 12px;">
+              <strong style="color:#fff;">INPUT LAYER</strong> (Environmental, Traffic, Energy, Water via MQTT/UART/Ethernet)
+            </div>
+            <div style="text-align:center; color: var(--red-primary); font-size: 10px;">↓</div>
+            <div style="background: rgba(255,255,255,0.04); border-left: 3px solid var(--red-primary); padding: 8px 12px;">
+              <strong style="color:#fff;">DATA ACQUISITION</strong> (Receives data, Timestamping, Data validation)
+            </div>
+            <div style="text-align:center; color: var(--red-primary); font-size: 10px;">↓</div>
+            <div style="background: rgba(229,9,20,0.2); border-left: 4px solid var(--red-primary); padding: 8px 12px;">
+              <strong style="color:#fff;">TWIN SYNCHRONIZER (HIGHEST PRIORITY)</strong> (Multi-rate sync, Timestamp comparison, Freshness check)
+            </div>
+            <div style="text-align:center; color: var(--red-primary); font-size: 10px;">↓</div>
+            <div style="background: rgba(255,255,255,0.04); border-left: 3px solid var(--text-muted); padding: 8px 12px;">
+              <strong style="color:#fff;">DIGITAL TWIN STATE & ANALYTICS MONITOR</strong> (Latency, Freshness, Deadline & Fault detection)
+            </div>
+          </div>
+
+          <div style="margin-top: 14px; font-size: 12px; color: var(--red-primary); font-family: var(--font-mono); font-weight: 700;">
+            QNX Mechanisms: Threads + Message Queues + Shared Memory + Timers
+          </div>
+
+          <button class="btn-red" onclick="goToSlide(3)">View Mechanism</button>
+        </div>
+      </div>
+      <div class="slide-badge-fixed">02</div>
+    </section>
+
+    <!-- ================= SLIDE 3: SYNCHRONIZATION MECHANISM ================= -->
+    <section class="slide" id="slide-3">
+      <div class="grid-50-50">
+        <!-- Left Side Mechanism Steps -->
+        <div>
+          <div class="red-accent-bar"></div>
+          <h2 class="section-title">SYNC MECHANISM</h2>
+
+          <ol style="margin-left: 18px; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+            <li style="margin-bottom: 4px;"><strong style="color:#fff;">Receive Data</strong> & add timestamp + sequence number</li>
+            <li style="margin-bottom: 4px;"><strong style="color:#fff;">Validate Data</strong> & compare timestamp with twin state</li>
+            <li style="margin-bottom: 4px;"><strong style="color:#fff;">Check Freshness:</strong> <code style="color:var(--red-primary); font-family:var(--font-mono);">Current Time − Timestamp &gt; Timeout → STALE DATA</code></li>
+            <li style="margin-bottom: 4px;"><strong style="color:#fff;">Update State</strong> & measure synchronization latency</li>
+            <li style="margin-bottom: 8px;"><strong style="color:#fff;">Trigger Fault Handling</strong> if deadline is exceeded</li>
+          </ol>
+
+          <div style="background: rgba(229, 9, 20, 0.1); border: 1px dashed var(--red-primary); padding: 10px; font-family: var(--font-mono); font-size: 11px; margin-top: 10px; color: #fff;">
+            <strong>Pipeline:</strong> Traffic Sensor → Data Acquisition → Timestamp → Twin Synchronizer → Digital Twin
+          </div>
+
+          <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+            <strong style="color:#fff;">Key Metrics:</strong> Sync latency | Data age | Update frequency | Deadline misses | Dropped/stale packets
+          </div>
+        </div>
+
+        <!-- Right Side Overlapping Frames -->
+        <div class="stacked-frames">
+          <div class="stacked-frame-2">
+            <img src="img_digital_twin.jpg" alt="Digital Twin City">
+          </div>
+          <div class="stacked-frame-1">
+            <img src="img_vr_interface.jpg" alt="Sync Latency Engine">
+          </div>
+        </div>
+      </div>
+      <div class="slide-badge-fixed">03</div>
+    </section>
+
+    <!-- ================= SLIDE 4: HARDWARE COMPONENTS TABLE ONLY ================= -->
+    <section class="slide" id="slide-4">
+      <div>
+        <div class="red-accent-bar"></div>
+        <h2 class="section-title">HARDWARE COMPONENTS</h2>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 10px;">
+          Hardware equipment required to build the QNX City Digital Twin Synchronization Engine:
+        </p>
+
+        <table class="hw-table">
+          <thead>
+            <tr>
+              <th style="width: 18%;">Category</th>
+              <th style="width: 25%;">Hardware Component</th>
+              <th style="width: 22%;">Specification / Model</th>
+              <th style="width: 35%;">Purpose & System Role</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong style="color:var(--red-primary);">Core SBC</strong></td>
+              <td><strong style="color:#fff;">Raspberry Pi 4 / 5</strong></td>
+              <td>4GB / 8GB RAM + 32GB MicroSD</td>
+              <td>Primary Target Board running QNX Neutrino RTOS & Sync Engine.</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#fff;">Power Supply</strong></td>
+              <td>Official USB-C Power Adapter</td>
+              <td>5V 3A (Pi 4) / 5V 5A (Pi 5)</td>
+              <td>Reliable power source to prevent undervoltage during sensor processing.</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#fff;">Debug Cable</strong></td>
+              <td>USB-to-TTL Serial Debug Cable</td>
+              <td>FTDI / PL2303 Chipset</td>
+              <td>Connects Pi GPIO Pins (TX/RX/GND) to PC for QNX boot logs & CLI terminal.</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#fff;">Network Link</strong></td>
+              <td>RJ45 Ethernet Cable</td>
+              <td>Cat 6 Cable</td>
+              <td>High-speed link for QNX network deployment, SSH, & MQTT telemetry.</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#fff;">Env Sensor</strong></td>
+              <td>BME280 / DHT22 Sensor</td>
+              <td>I2C / GPIO Interface</td>
+              <td>Measures temperature, humidity & air quality (1 Hz feed stream).</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#fff;">Traffic Sensor</strong></td>
+              <td>HC-SR04 Ultrasonic Sensor</td>
+              <td>GPIO Pulse Echo Pin</td>
+              <td>Measures distance/vehicle count to simulate traffic congestion (10 Hz feed).</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#fff;">Energy Sensor</strong></td>
+              <td>Potentiometer / ACS712</td>
+              <td>Analog Dial / GPIO Input</td>
+              <td>Dial input for simulating power grid consumption loads (5 Hz feed).</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#fff;">Prototyping</strong></td>
+              <td>Breadboard & Jumper Wires</td>
+              <td>M-to-F & M-to-M Wires</td>
+              <td>Wiring physical sensors to Raspberry Pi GPIO header pins.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="slide-badge-fixed">04</div>
+    </section>
+
+    <!-- ================= SLIDE 5: DEMO & EXPECTED RESULTS ================= -->
+    <section class="slide" id="slide-5">
+      <div class="grid-50-50">
+        <!-- Left Side Polygon Image Frame -->
+        <div class="poly-frame">
+          <img src="qnx_demo_slide.jpg" alt="Demo HUD">
+        </div>
+
+        <!-- Right Side Demo Rows -->
+        <div>
+          <div class="red-accent-bar"></div>
+          <h2 class="section-title">DEMO & RESULTS</h2>
+
+          <div class="row-item">
+            <div class="red-num-badge">01</div>
+            <div>
+              <strong>Simulate 4 Subsystems & Real-Time CLI</strong>
+              <p>Environment (1Hz), Traffic (10Hz), Energy (5Hz), Water (2Hz). CLI displays state, update timestamp, data age, sync latency, & deadline violations.</p>
+            </div>
+          </div>
+
+          <div class="row-item">
+            <div class="red-num-badge">02</div>
+            <div>
+              <strong>Fault Injection & STALE FLAG Behavior</strong>
+              <p>Intentionally delay a sensor feed: <code style="color:var(--red-primary); font-family:var(--font-mono);">Sensor Delay → Timeout → STALE FLAG → Fault Monitor → Twin retains last valid state</code>.</p>
+            </div>
+          </div>
+
+          <div class="row-item">
+            <div class="red-num-badge">03</div>
+            <div>
+              <strong>Success Criteria & Final Output</strong>
+              <p>Deterministic periodic sync, stale-data detection, bounded latency, correct multi-rate updates. <em>Live QNX Digital Twin + Real-Time Metrics</em>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-badge-fixed">05</div>
+    </section>
+
+  </div>
+
+  <!-- Bottom Controls -->
+  <footer>
+    <div class="foot-text">City Digital Twin Real-Time Synchronization Engine | Target: Raspberry Pi 4/5 QNX</div>
+
+    <div class="foot-controls">
+      <button class="btn-nav" onclick="prevSlide()">← PREV</button>
+      <button class="btn-nav" onclick="nextSlide()">NEXT →</button>
+    </div>
+  </footer>
+
+  <script>
+    let currentSlide = 1;
+    const totalSlides = 5;
+
+    function goToSlide(n) {
+      currentSlide = n;
+      updateSlideView();
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides) {
+        currentSlide++;
+        updateSlideView();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 1) {
+        currentSlide--;
+        updateSlideView();
+      }
+    }
+
+    function updateSlideView() {
+      document.querySelectorAll('.slide').forEach((slide, idx) => {
+        slide.classList.remove('active');
+        if (idx + 1 === currentSlide) {
+          slide.classList.add('active');
+        }
+      });
+
+      // Update Nav links highlighting
+      document.querySelectorAll('.nav-link').forEach((link, idx) => {
+        if (idx + 1 === currentSlide) {
+          link.classList.add('active');
+        } else {
+          link.classList.remove('active');
+        }
+      });
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'Space' || e.key === 'PageDown') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        prevSlide();
+      }
+    });
+  </script>
+</body>
+</html>

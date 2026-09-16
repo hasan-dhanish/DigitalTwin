@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>City Digital Twin 3D Real-Time Visualizer | QNX RTOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-light: #f0f4f8;
+      --card-bg: rgba(255, 255, 255, 0.92);
+      --red-primary: #d32f2f;
+      --red-glow: rgba(211, 47, 47, 0.35);
+      --cyan-accent: #0288d1;
+      --green-accent: #2e7d32;
+      --orange-accent: #e65100;
+      --text-dark: #0f172a;
+      --text-muted: #475569;
+      --border-light: rgba(0, 0, 0, 0.08);
+      --font-heading: 'Anton', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--bg-light);
+      color: var(--text-dark);
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* 3D Canvas Container */
+    #canvas-container {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    /* Top HUD Header Overlay */
+    header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 70px;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(240, 244, 248, 0.8) 80%, transparent 100%);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+      border-bottom: 1px solid var(--border-light);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-badge {
+      background: var(--red-primary);
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 11px;
+      padding: 4px 10px;
+      letter-spacing: 1px;
+      border-radius: 4px;
+    }
+
+    .brand-title {
+      font-family: var(--font-heading);
+      font-size: 22px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-dark);
+    }
+
+    /* Real-Time Sync Engine Metrics Bar */
+    .rtos-status-bar {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-item strong {
+      color: var(--text-dark);
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green-accent);
+      box-shadow: 0 0 8px var(--green-accent);
+      animation: pulse-dot 1.5s infinite;
+    }
+
+    .status-dot.fault {
+      background: var(--red-primary);
+      box-shadow: 0 0 10px var(--red-primary);
+    }
+
+    @keyframes pulse-dot {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    /* Side Panel HUD Cards (Subsystem Telemetry) */
+    .telemetry-panel {
+      position: absolute;
+      top: 90px;
+      left: 32px;
+      width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .card-hud {
+      background: var(--card-bg);
+      border: 1px solid var(--border-light);
+      border-left: 4px solid var(--cyan-accent);
+      border-radius: 8px;
+      padding: 14px 16px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+      pointer-events: auto;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .card-hud:hover {
+      border-color: var(--cyan-accent);
+      transform: translateX(4px);
+      box-shadow: 0 12px 36px rgba(2, 136, 209, 0.15);
+    }
+
+    .card-hud.fault-state {
+      border-left-color: var(--red-primary) !important;
+      background: rgba(255, 235, 238, 0.95) !important;
+      border-color: var(--red-primary) !important;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-rate {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      background: rgba(2, 136, 209, 0.1);
+      padding: 2px 6px;
+      color: var(--cyan-accent);
+      font-weight: 700;
+      border-radius: 3px;
+    }
+
+    .card-value {
+      font-family: var(--font-mono);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--cyan-accent);
+    }
+
+    .card-value.fault {
+      color: var(--red-primary) !important;
+    }
+
+    .card-subtext {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Right Side Interactive Fault Controls Panel */
+    .controls-panel {
+      position: absolute;
+      top: 90px;
+      right: 32px;
+      width: 320px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-light);
+      border-top: 4px solid var(--red-primary);
+      border-radius: 8px;
+      padding: 20px;
+      backdrop-filter: blur(12px);
+      z-index: 10;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.08);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease, visibility 0.35s;
+    }
+
+    .controls-panel.hidden {
+      transform: translateX(380px);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .panel-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .btn-panel-toggle {
+      background: rgba(0, 0, 0, 0.05);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      color: var(--text-dark);
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .btn-panel-toggle:hover {
+      background: var(--red-primary);
+      color: #ffffff;
+      border-color: var(--red-primary);
+    }
+
+    /* Floating Tab to reopen panel when hidden */
+    .btn-floating-fault-toggle {
+      position: absolute;
+      top: 90px;
+      right: 32px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-light);
+      border-right: 4px solid var(--red-primary);
+      color: var(--text-dark);
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      z-index: 10;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateX(20px);
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .btn-floating-fault-toggle:hover {
+      background: #ffffff;
+      border-color: var(--red-primary);
+      transform: translateX(0);
+      box-shadow: 0 10px 35px rgba(211, 47, 47, 0.2);
+    }
+
+    .btn-floating-fault-toggle.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(0);
+    }
+
+    .panel-title {
+      font-family: var(--font-heading);
+      font-size: 20px;
+      color: var(--text-dark);
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+
+    .panel-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 0;
+    }
+
+    .btn-fault {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      color: var(--text-dark);
+      padding: 10px 14px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+    }
+
+    .btn-fault:hover {
+      background: #fdf2f2;
+      border-color: var(--red-primary);
+      transform: translateX(-2px);
+      color: var(--red-primary);
+    }
+
+    .btn-fault.btn-reset {
+      background: var(--red-primary);
+      border-color: var(--red-primary);
+      color: #ffffff;
+      margin-top: 10px;
+    }
+
+    .btn-fault.btn-reset:hover {
+      background: #b71c1c;
+      box-shadow: 0 4px 16px rgba(211, 47, 47, 0.4);
+      color: #ffffff;
+    }
+
+    .key-badge {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 11px;
+      background: #f1f5f9;
+      padding: 2px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 3px;
+      color: #334155;
+    }
+
+    /* Bottom Camera Preset Controls Bar */
+    .cam-controls {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-light);
+      padding: 8px 18px;
+      border-radius: 30px;
+      z-index: 10;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    .btn-cam {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 14px;
+      border-radius: 16px;
+      transition: all 0.2s;
+    }
+
+    .btn-cam:hover, .btn-cam.active {
+      color: #ffffff;
+      background: var(--red-primary);
+    }
+
+    /* Floating 3D Component Marker Pins */
+    .pin-label {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--cyan-accent);
+      border-left: 4px solid var(--cyan-accent);
+      color: var(--text-dark);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      pointer-events: none;
+      z-index: 5;
+      transform: translate(-50%, -100%);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pin-label.pin-traffic { border-color: var(--cyan-accent); border-left-color: var(--cyan-accent); }
+    .pin-label.pin-power { border-color: var(--orange-accent); border-left-color: var(--orange-accent); }
+    .pin-label.pin-water { border-color: #1976d2; border-left-color: #1976d2; }
+    .pin-label.pin-air { border-color: var(--green-accent); border-left-color: var(--green-accent); }
+
+    .pin-label.fault-pin {
+      border-color: var(--red-primary) !important;
+      border-left-color: var(--red-primary) !important;
+      background: var(--red-primary) !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 20px var(--red-glow) !important;
+    }
+
+    /* Live Alarm Alert Banner Overlay */
+    .alert-overlay {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: var(--red-primary);
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 13px;
+      padding: 8px 24px;
+      border-radius: 6px;
+      z-index: 20;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 8px 30px var(--red-glow);
+    }
+
+    .alert-overlay.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 3D Canvas Viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- Floating 3D Component Labels -->
+  <div class="pin-label pin-traffic" id="pin-traffic">🚗 TRAFFIC SUBSYSTEM (10Hz)</div>
+  <div class="pin-label pin-power" id="pin-power">⚡ POWER GRID SUBSTATION (5Hz)</div>
+  <div class="pin-label pin-water" id="pin-water">💧 WATER PRESSURE RESERVOIR (2Hz)</div>
+  <div class="pin-label pin-air" id="pin-air">🌿 ENVIRONMENTAL AQI STATION (1Hz)</div>
+
+  <!-- Alarm Banner -->
+  <div class="alert-overlay" id="alert-banner">⚠️ STALE FAULT DETECTED: TRAFFIC SENSOR DISCONNECTED (>150ms LAG)</div>
+
+  <!-- Top HUD Overlay -->
+  <header>
+    <div class="brand">
+      <div class="brand-badge">QNX RTOS v7.1</div>
+      <div class="brand-title">REALISTIC 3D CITY DIGITAL TWIN</div>
+    </div>
+
+    <div class="rtos-status-bar">
+      <div class="status-item">
+        <div class="status-dot" id="system-dot"></div>
+        <span>SYSTEM: <strong id="sys-status-text" style="color: var(--green-accent);">OPTIMAL</strong></span>
+      </div>
+      <div class="status-item">
+        <span>SYNC PERIOD: <strong>10.0 ms</strong></span>
+      </div>
+      <div class="status-item">
+        <span>SYNC LATENCY: <strong id="sys-latency-text" style="color: var(--cyan-accent);">3.8 ms</strong></span>
+      </div>
+      <div class="status-item">
+        <span>DEADLINE BUDGET: <strong style="color: var(--text-muted);">&lt;15.0 ms</strong></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Left Side Telemetry Panel -->
+  <div class="telemetry-panel">
+    <!-- Traffic Stream Card -->
+    <div class="card-hud" id="card-traffic" onclick="focusComponent('traffic')">
+      <div class="card-header">
+        <div class="card-title">🚗 Traffic Subsystem</div>
+        <div class="card-rate">10 Hz</div>
+      </div>
+      <div class="card-value" id="val-traffic">64.2 km/h</div>
+      <div class="card-subtext">
+        <span>Freshness: <strong id="fresh-traffic" style="color: var(--green-accent);">12ms ago</strong></span>
+        <span id="state-traffic" style="color: var(--green-accent);">[ONLINE]</span>
+      </div>
+    </div>
+
+    <!-- Power Grid Stream Card -->
+    <div class="card-hud" id="card-power" style="border-left-color: var(--orange-accent);" onclick="focusComponent('power')">
+      <div class="card-header">
+        <div class="card-title">⚡ Smart Power Grid</div>
+        <div class="card-rate">5 Hz</div>
+      </div>
+      <div class="card-value" id="val-power" style="color: var(--orange-accent);">428.5 MW</div>
+      <div class="card-subtext">
+        <span>Freshness: <strong id="fresh-power" style="color: var(--green-accent);">45ms ago</strong></span>
+        <span style="color: var(--green-accent);">[ONLINE]</span>
+      </div>
+    </div>
+
+    <!-- Water Network Stream Card -->
+    <div class="card-hud" id="card-water" style="border-left-color: #1976d2;" onclick="focusComponent('water')">
+      <div class="card-header">
+        <div class="card-title">💧 Water Network</div>
+        <div class="card-rate">2 Hz</div>
+      </div>
+      <div class="card-value" id="val-water" style="color: #1976d2;">62.4 PSI</div>
+      <div class="card-subtext">
+        <span>Freshness: <strong id="fresh-water" style="color: var(--green-accent);">120ms ago</strong></span>
+        <span style="color: var(--green-accent);">[ONLINE]</span>
+      </div>
+    </div>
+
+    <!-- Environmental AQI Stream Card -->
+    <div class="card-hud" id="card-air" style="border-left-color: var(--green-accent);" onclick="focusComponent('air')">
+      <div class="card-header">
+        <div class="card-title">🌿 Environmental AQI</div>
+        <div class="card-rate">1 Hz</div>
+      </div>
+      <div class="card-value" id="val-air" style="color: var(--green-accent);">38.0 AQI</div>
+      <div class="card-subtext">
+        <span>Freshness: <strong id="fresh-air" style="color: var(--green-accent);">380ms ago</strong></span>
+        <span style="color: var(--green-accent);">[ONLINE]</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Re-open Button when panel is hidden -->
+  <button class="btn-floating-fault-toggle" id="btn-show-fault-panel" onclick="toggleFaultPanel()" title="Show Fault Panel (HotKey: H)">
+    <span>⚡ Show Fault Injection Panel</span>
+    <span class="key-badge">KEY H</span>
+  </button>
+
+  <!-- Right Side Interactive Fault Control Panel -->
+  <div class="controls-panel" id="controls-panel">
+    <div class="panel-header-row">
+      <div>
+        <div class="panel-title">Fault Injection</div>
+        <div class="panel-subtitle">Inject runtime anomalies into QNX RTOS engine:</div>
+      </div>
+      <button class="btn-panel-toggle" onclick="toggleFaultPanel()" title="Hide Fault Panel (HotKey: H)">✕</button>
+    </div>
+
+    <button class="btn-fault" onclick="injectFault(1)">
+      <span>Disconnect Traffic Sensor</span>
+      <span class="key-badge">KEY 1</span>
+    </button>
+
+    <button class="btn-fault" onclick="injectFault(2)">
+      <span>Inject 500ms Network Delay</span>
+      <span class="key-badge">KEY 2</span>
+    </button>
+
+    <button class="btn-fault" onclick="injectFault(3)">
+      <span>Overload CPU Budget</span>
+      <span class="key-badge">KEY 3</span>
+    </button>
+
+    <button class="btn-fault btn-reset" onclick="resetFaults()">
+      <span>Reset System & Clear Faults</span>
+      <span class="key-badge">KEY R</span>
+    </button>
+  </div>
+
+  <!-- Bottom Camera View Preset Bar -->
+  <div class="cam-controls">
+    <span style="font-size: 11px; color: var(--text-muted); margin-right: 6px;">Focus Component:</span>
+    <button class="btn-cam active" id="btn-cam-overview" onclick="focusComponent('overview')">City Overview</button>
+    <button class="btn-cam" id="btn-cam-traffic" onclick="focusComponent('traffic')">🚗 Traffic</button>
+    <button class="btn-cam" id="btn-cam-power" onclick="focusComponent('power')">⚡ Power</button>
+    <button class="btn-cam" id="btn-cam-water" onclick="focusComponent('water')">💧 Water</button>
+    <button class="btn-cam" id="btn-cam-air" onclick="focusComponent('air')">🌿 Environment</button>
+  </div>
+
+  <!-- Import Three.js & OrbitControls via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+    // --- THREE.JS LIGHT THEME SCENE SETUP ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    
+    // Light sky fog & background
+    const skyColor = 0xdbe4ed;
+    scene.background = new THREE.Color(skyColor);
+    scene.fog = new THREE.FogExp2(skyColor, 0.003);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+    camera.position.set(70, 60, 85);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.02;
+
+    // --- DAYTIME LIGHTING ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfffdf5, 1.2);
+    sunLight.position.set(70, 110, 50);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.bias = -0.0001;
+    scene.add(sunLight);
+
+    // Red Alarm Warning Light (Flashes when fault is injected)
+    const alarmLight = new THREE.PointLight(0xd32f2f, 0, 120);
+    alarmLight.position.set(0, 30, 0);
+    scene.add(alarmLight);
+
+    // --- CITY GROUND, ROADS, RIVER & PARKS ---
+    const groundGeom = new THREE.PlaneGeometry(180, 180);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x4b5e70, roughness: 0.8 });
+    const ground = new THREE.Mesh(groundGeom, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // River Body (Clear Blue Water Area)
+    const riverGeom = new THREE.PlaneGeometry(180, 24);
+    const riverMat = new THREE.MeshStandardMaterial({ color: 0x0288d1, roughness: 0.1, metalness: 0.6 });
+    const river = new THREE.Mesh(riverGeom, riverMat);
+    river.rotation.x = -Math.PI / 2;
+    river.position.set(0, 0.1, -45);
+    scene.add(river);
+
+    // Park Area (Fresh Green Grounds)
+    const parkGeom = new THREE.PlaneGeometry(35, 35);
+    const parkMat = new THREE.MeshStandardMaterial({ color: 0x66bb6a, roughness: 0.8 });
+    const park = new THREE.Mesh(parkGeom, parkMat);
+    park.rotation.x = -Math.PI / 2;
+    park.position.set(-45, 0.1, 45);
+    scene.add(park);
+
+    // Asphalt Roads Network (Dark Slate Asphalt so White Lane Lines & Cars Stand Out)
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
+    
+    // Main Avenue Road 1 (North-South)
+    const roadNS = new THREE.Mesh(new THREE.PlaneGeometry(16, 180), roadMat);
+    roadNS.rotation.x = -Math.PI / 2;
+    roadNS.position.set(0, 0.15, 0);
+    roadNS.receiveShadow = true;
+    scene.add(roadNS);
+
+    // Main Avenue Road 2 (East-West)
+    const roadEW = new THREE.Mesh(new THREE.PlaneGeometry(180, 16), roadMat);
+    roadEW.rotation.x = -Math.PI / 2;
+    roadEW.position.set(0, 0.15, 0);
+    roadEW.receiveShadow = true;
+    scene.add(roadEW);
+
+    // White Lane Markings
+    const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    for (let i = -80; i <= 80; i += 10) {
+      if (Math.abs(i) < 10) continue;
+      const line1 = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 4), lineMat);
+      line1.rotation.x = -Math.PI / 2;
+      line1.position.set(0, 0.2, i);
+      scene.add(line1);
+
+      const line2 = new THREE.Mesh(new THREE.PlaneGeometry(4, 0.6), lineMat);
+      line2.rotation.x = -Math.PI / 2;
+      line2.position.set(i, 0.2, 0);
+      scene.add(line2);
+    }
+
+    // --- 4 DISTINCT 3D SUBSYSTEM COMPONENT LOCATIONS & BUILDINGS ---
+    
+    // 1. 🚗 TRAFFIC SUBSYSTEM COMPONENT (Intersection at 0, 0)
+    const trafficPos = new THREE.Vector3(0, 8, 0);
+    const cars = [];
+    const carGeom = new THREE.BoxGeometry(1.6, 1.0, 3.2);
+    const carColors = [0x0288d1, 0xef6c00, 0x334155, 0x2e7d32, 0xd32f2f];
+
+    for (let i = 0; i < 16; i++) {
+      const cMat = new THREE.MeshStandardMaterial({ color: carColors[i % carColors.length], roughness: 0.2 });
+      const car = new THREE.Mesh(carGeom, cMat);
+      car.castShadow = true;
+      car.userData = {
+        speed: 0.25 + Math.random() * 0.3,
+        axis: i % 2 === 0 ? 'x' : 'z',
+        dir: i % 4 < 2 ? 1 : -1,
+        lane: (Math.random() - 0.5) * 8
+      };
+      car.position.set(
+        car.userData.axis === 'x' ? (Math.random() - 0.5) * 140 : car.userData.lane,
+        0.7,
+        car.userData.axis === 'z' ? (Math.random() - 0.5) * 140 : car.userData.lane
+      );
+      scene.add(car);
+      cars.push(car);
+    }
+
+    // 2. ⚡ SMART POWER GRID SUBSTATION COMPONENT (East Sector at 45, 0, -10)
+    const powerPos = new THREE.Vector3(45, 12, -10);
+    const powerGroup = new THREE.Group();
+    scene.add(powerGroup);
+
+    // Power Transformers & Towers
+    for (let i = 0; i < 3; i++) {
+      const towerGeom = new THREE.CylinderGeometry(1, 4, 22, 6);
+      const towerMat = new THREE.MeshStandardMaterial({ color: 0xe65100, metalness: 0.7, wireframe: true });
+      const tower = new THREE.Mesh(towerGeom, towerMat);
+      tower.position.set(38 + i * 8, 11, -10 + (i % 2) * 6);
+      powerGroup.add(tower);
+    }
+
+    // 3. 💧 WATER NETWORK RESERVOIR COMPONENT (West Riverbank at -45, 0, -45)
+    const waterPos = new THREE.Vector3(-45, 14, -45);
+    const waterGroup = new THREE.Group();
+    scene.add(waterGroup);
+
+    // Water Tanks & Towers
+    const tankGeom = new THREE.CylinderGeometry(8, 8, 14, 16);
+    const tankMat = new THREE.MeshStandardMaterial({ color: 0x0288d1, roughness: 0.2, metalness: 0.5 });
+    const tank = new THREE.Mesh(tankGeom, tankMat);
+    tank.position.set(-45, 12, -45);
+    tank.castShadow = true;
+    waterGroup.add(tank);
+
+    // 4. 🌿 ENVIRONMENTAL AQI STATION COMPONENT (Park Sector at -45, 0, 45)
+    const airPos = new THREE.Vector3(-45, 10, 45);
+    const airGroup = new THREE.Group();
+    scene.add(airGroup);
+
+    // AQI Weather Station Dome & Trees
+    const domeGeom = new THREE.SphereGeometry(7, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const domeMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, transparent: true, opacity: 0.45, wireframe: true });
+    const dome = new THREE.Mesh(domeGeom, domeMat);
+    dome.position.set(-45, 0.2, 45);
+    airGroup.add(dome);
+
+    // Park Trees
+    for (let i = 0; i < 14; i++) {
+      const treeTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 4), new THREE.MeshStandardMaterial({ color: 0x5d4037 }));
+      const treeLeaves = new THREE.Mesh(new THREE.ConeGeometry(2.5, 7, 8), new THREE.MeshStandardMaterial({ color: 0x388e3c }));
+      const tx = -45 + (Math.random() - 0.5) * 28;
+      const tz = 45 + (Math.random() - 0.5) * 28;
+      treeTrunk.position.set(tx, 2, tz);
+      treeLeaves.position.set(tx, 6, tz);
+      treeTrunk.castShadow = true;
+      treeLeaves.castShadow = true;
+      scene.add(treeTrunk);
+      scene.add(treeLeaves);
+    }
+
+    // --- HIGH CONTRAST MODERN ARCHITECTURAL BUILDINGS ---
+    const buildingGroup = new THREE.Group();
+    scene.add(buildingGroup);
+
+    // 3 Distinct Slate & Glass Architectural Building Materials for High Contrast Visibility
+    const bldgMaterials = [
+      new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.3, metalness: 0.4 }), // Steel Slate Blue
+      new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.4, metalness: 0.3 }), // Modern Cool Slate
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.2, metalness: 0.5 })  // Deep Corporate Navy
+    ];
+
+    const roofMaterials = [
+      new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 }),
+      new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.7 }),
+      new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.6 })
+    ];
+
+    const outlineMat = new THREE.LineBasicMaterial({ color: 0x0f172a, linewidth: 1 });
+
+    function createBuilding(x, z, w, d, h, typeIndex) {
+      const mat = bldgMaterials[typeIndex % bldgMaterials.length];
+      const roofMat = roofMaterials[typeIndex % roofMaterials.length];
+
+      const bGeom = new THREE.BoxGeometry(w, h, d);
+      const building = new THREE.Mesh(bGeom, mat);
+      building.position.set(x, h / 2, z);
+      building.castShadow = true;
+      building.receiveShadow = true;
+
+      // Crisp Edge Outlines for High Definition Architectural Contrast
+      const edges = new THREE.EdgesGeometry(bGeom);
+      const line = new THREE.LineSegments(edges, outlineMat);
+      building.add(line);
+
+      // Roof Cap with Accent Rim
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 1.2, d * 0.9), roofMat);
+      roof.position.set(0, h / 2 + 0.6, 0);
+      building.add(roof);
+
+      buildingGroup.add(building);
+    }
+
+    // City Quadrants (Avoiding Roads, Park, River, Power Plant)
+    for (let i = 0; i < 40; i++) {
+      const q = i % 4;
+      let x = 0, z = 0;
+
+      if (q === 0) { x = 15 + Math.random() * 55; z = 15 + Math.random() * 55; }
+      else if (q === 1) { x = -15 - Math.random() * 20; z = 15 + Math.random() * 20; }
+      else if (q === 2) { x = 15 + Math.random() * 55; z = -15 - Math.random() * 20; }
+      else { x = 20 + Math.random() * 50; z = -20 - Math.random() * 20; }
+
+      const w = 6 + Math.random() * 6;
+      const d = 6 + Math.random() * 6;
+      const h = 12 + Math.random() * 32;
+
+      createBuilding(x, z, w, d, h, i);
+    }
+
+    // --- UPDATE 3D FLOATING HUD PINS ON SCREEN ---
+    function updatePins() {
+      const pinMap = [
+        { id: 'pin-traffic', pos: trafficPos },
+        { id: 'pin-power', pos: powerPos },
+        { id: 'pin-water', pos: waterPos },
+        { id: 'pin-air', pos: airPos }
+      ];
+
+      pinMap.forEach(p => {
+        const el = document.getElementById(p.id);
+        const vec = p.pos.clone().project(camera);
+        const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-vec.y * 0.5 + 0.5) * window.innerHeight;
+
+        // Hide pin if behind camera
+        if (vec.z > 1) {
+          el.style.display = 'none';
+        } else {
+          el.style.display = 'flex';
+          el.style.left = `${x}px`;
+          el.style.top = `${y}px`;
+        }
+      });
+    }
+
+    // --- FAULT INJECTION & SYSTEM STATE LOGIC ---
+    let systemState = 'OPTIMAL';
+
+    function injectFault(type) {
+      if (type === 1) {
+        systemState = 'FAULT_STALE';
+        document.getElementById('alert-banner').textContent = '⚠️ STALE FAULT DETECTED: TRAFFIC SENSOR DISCONNECTED (>150ms LAG)';
+        document.getElementById('alert-banner').classList.add('show');
+        
+        document.getElementById('card-traffic').classList.add('fault-state');
+        document.getElementById('val-traffic').classList.add('fault');
+        document.getElementById('val-traffic').textContent = '0.0 km/h [DISCONNECTED]';
+        document.getElementById('fresh-traffic').style.color = '#d32f2f';
+        document.getElementById('fresh-traffic').textContent = '184ms ago (STALE)';
+        document.getElementById('state-traffic').style.color = '#d32f2f';
+        document.getElementById('state-traffic').textContent = '[STALE FAULT]';
+
+        document.getElementById('pin-traffic').classList.add('fault-pin');
+        document.getElementById('sys-status-text').style.color = '#d32f2f';
+        document.getElementById('sys-status-text').textContent = 'STALE FAULT';
+        document.getElementById('system-dot').classList.add('fault');
+
+        alarmLight.intensity = 3;
+      } 
+      else if (type === 2) {
+        systemState = 'FAULT_DELAY';
+        document.getElementById('alert-banner').textContent = '🚨 DEADLINE BREACH ALARM: 500ms TRANSMISSION LAG DETECTED!';
+        document.getElementById('alert-banner').classList.add('show');
+
+        document.getElementById('sys-latency-text').style.color = '#d32f2f';
+        document.getElementById('sys-latency-text').textContent = '512.4 ms [BREACH]';
+        document.getElementById('sys-status-text').style.color = '#e65100';
+        document.getElementById('sys-status-text').textContent = 'DEADLINE BREACH';
+      }
+      else if (type === 3) {
+        systemState = 'FAULT_OVERLOAD';
+        document.getElementById('alert-banner').textContent = '⚡ CPU BUDGET OVERLOAD: PRIORITY 255 PREEMPTION ENGAGED';
+        document.getElementById('alert-banner').classList.add('show');
+
+        document.getElementById('sys-latency-text').style.color = '#e65100';
+        document.getElementById('sys-latency-text').textContent = '14.2 ms (Preempted)';
+      }
+    }
+
+    function resetFaults() {
+      systemState = 'OPTIMAL';
+      document.getElementById('alert-banner').classList.remove('show');
+
+      document.getElementById('card-traffic').classList.remove('fault-state');
+      document.getElementById('val-traffic').classList.remove('fault');
+      document.getElementById('val-traffic').textContent = '64.2 km/h';
+      document.getElementById('fresh-traffic').style.color = '#2e7d32';
+      document.getElementById('fresh-traffic').textContent = '12ms ago';
+      document.getElementById('state-traffic').style.color = '#2e7d32';
+      document.getElementById('state-traffic').textContent = '[ONLINE]';
+
+      document.getElementById('pin-traffic').classList.remove('fault-pin');
+      document.getElementById('sys-status-text').style.color = '#2e7d32';
+      document.getElementById('sys-status-text').textContent = 'OPTIMAL';
+      document.getElementById('sys-latency-text').style.color = '#0288d1';
+      document.getElementById('sys-latency-text').textContent = '3.8 ms';
+      document.getElementById('system-dot').classList.remove('fault');
+
+      alarmLight.intensity = 0;
+    }
+
+    // --- TOGGLE FAULT INJECTION PANEL ---
+    function toggleFaultPanel() {
+      const panel = document.getElementById('controls-panel');
+      const showBtn = document.getElementById('btn-show-fault-panel');
+      panel.classList.toggle('hidden');
+      if (panel.classList.contains('hidden')) {
+        showBtn.classList.add('show');
+      } else {
+        showBtn.classList.remove('show');
+      }
+    }
+
+    // --- FOCUS ON COMPONENT & CAMERA ANIMATION ---
+    function focusComponent(name) {
+      document.querySelectorAll('.btn-cam').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById(`btn-cam-${name}`);
+      if (btn) btn.classList.add('active');
+
+      if (name === 'overview') {
+        controls.target.set(0, 0, 0);
+        camera.position.set(70, 60, 85);
+      } else if (name === 'traffic') {
+        controls.target.copy(trafficPos);
+        camera.position.set(0, 18, 30);
+      } else if (name === 'power') {
+        controls.target.copy(powerPos);
+        camera.position.set(65, 24, 10);
+      } else if (name === 'water') {
+        controls.target.copy(waterPos);
+        camera.position.set(-25, 22, -25);
+      } else if (name === 'air') {
+        controls.target.copy(airPos);
+        camera.position.set(-25, 18, 65);
+      }
+    }
+
+    // --- KEYBOARD HOTKEYS (1, 2, 3, R, H) ---
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '1') injectFault(1);
+      if (e.key === '2') injectFault(2);
+      if (e.key === '3') injectFault(3);
+      if (e.key === 'r' || e.key === 'R') resetFaults();
+      if (e.key === 'h' || e.key === 'H') toggleFaultPanel();
+    });
+
+    // --- LIVE QNX TELEMETRY API POLLING ---
+    async function fetchTelemetry() {
+      try {
+        const apiUrl = window.location.protocol.startsWith('http') ? '/api/telemetry' : 'http://localhost:8080/api/telemetry';
+        const res = await fetch(apiUrl);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data || !data.snapshot) return;
+
+        const latEl = document.getElementById('sys-latency-text');
+        if (latEl) latEl.textContent = `${data.sync_latency_ms} ms`;
+
+        const statEl = document.getElementById('sys-status-text');
+        if (statEl) {
+          statEl.textContent = data.system_state;
+          if (data.system_state.includes('NORMAL')) {
+            statEl.style.color = '#2e7d32';
+          } else {
+            statEl.style.color = '#d32f2f';
+          }
+        }
+
+        const snap = data.snapshot;
+        if (snap.traffic) {
+          const el = document.getElementById('val-traffic');
+          if (el) el.textContent = `${snap.traffic.val} ${snap.traffic.unit}`;
+          const fr = document.getElementById('fresh-traffic');
+          if (fr) fr.textContent = `${snap.traffic.freshness_ms}ms ago`;
+        }
+        if (snap.power) {
+          const el = document.getElementById('val-power');
+          if (el) el.textContent = `${snap.power.val} ${snap.power.unit}`;
+          const fr = document.getElementById('fresh-power');
+          if (fr) fr.textContent = `${snap.power.freshness_ms}ms ago`;
+        }
+        if (snap.water) {
+          const el = document.getElementById('val-water');
+          if (el) el.textContent = `${snap.water.val} ${snap.water.unit}`;
+          const fr = document.getElementById('fresh-water');
+          if (fr) fr.textContent = `${snap.water.freshness_ms}ms ago`;
+        }
+        if (snap.air) {
+          const el = document.getElementById('val-air');
+          if (el) el.textContent = `${snap.air.val} ${snap.air.unit}`;
+          const fr = document.getElementById('fresh-air');
+          if (fr) fr.textContent = `${snap.air.freshness_ms}ms ago`;
+        }
+      } catch (e) {}
+    }
+
+    setInterval(fetchTelemetry, 250);
+
+    // --- ANIMATION LOOP ---
+    function animate() {
+
+      requestAnimationFrame(animate);
+
+      // Animate cars if system is not in TRAFFIC STALE FAULT
+      if (systemState !== 'FAULT_STALE') {
+        cars.forEach(c => {
+          if (c.userData.axis === 'x') {
+            c.position.x += c.userData.speed * c.userData.dir;
+            if (Math.abs(c.position.x) > 85) c.userData.dir *= -1;
+          } else {
+            c.position.z += c.userData.speed * c.userData.dir;
+            if (Math.abs(c.position.z) > 85) c.userData.dir *= -1;
+          }
+        });
+      }
+
+      controls.update();
+      updatePins();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Handle Window Resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

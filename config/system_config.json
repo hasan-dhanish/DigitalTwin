@@ -1,0 +1,53 @@
+{
+  "system_name": "QNX City Digital Twin Synchronization Engine",
+  "version": "1.0.0-RTOS",
+  "sync_engine": {
+    "period_ms": 10,
+    "deadline_ms": 15.0,
+    "max_ring_buffer_size": 256,
+    "priority_level": 255
+  },
+  "watchdog": {
+    "period_ms": 50,
+    "stale_timeout_ms": 150,
+    "priority_level": 200
+  },
+  "streams": [
+    {
+      "id": "traffic",
+      "name": "Traffic Telemetry",
+      "period_ms": 50,
+      "priority_level": 150,
+      "unit": "km/h",
+      "nominal_range": [30.0, 90.0]
+    },
+    {
+      "id": "power",
+      "name": "Smart Power Grid",
+      "period_ms": 100,
+      "priority_level": 150,
+      "unit": "MW",
+      "nominal_range": [350.0, 500.0]
+    },
+    {
+      "id": "water",
+      "name": "Water Pressure Network",
+      "period_ms": 500,
+      "priority_level": 150,
+      "unit": "PSI",
+      "nominal_range": [40.0, 80.0]
+    },
+    {
+      "id": "air",
+      "name": "Environmental AQI",
+      "period_ms": 1000,
+      "priority_level": 150,
+      "unit": "AQI",
+      "nominal_range": [15.0, 75.0]
+    }
+  ],
+  "cli_dashboard": {
+    "refresh_rate_ms": 100,
+    "priority_level": 50
+  }
+}

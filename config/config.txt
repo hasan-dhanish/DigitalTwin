@@ -1,0 +1,25 @@
+# ==============================================================================
+# QNX Neutrino RTOS - Raspberry Pi 4 B Boot Configuration (config.txt)
+# Problem Statement #48 - City Digital Twin Real-Time Synchronization Engine
+# ==============================================================================
+
+# Boot kernel selection (QNX Image Filesystem RAW / BIN)
+kernel=ifs-raspberrypi-4b.bin
+arm_64bit=1
+
+# Enable PL011 UART for QNX Serial Debug Console (GPIO 14 TX / GPIO 15 RX)
+enable_uart=1
+uart_250mhz=1
+
+# RAM & GPU Allocation (Maximize available System RAM for QNX RTOS)
+gpu_mem=64
+
+# Force HDMI Output for QNX Display & Console
+hdmi_force_hotplug=1
+config_hdmi_boost=4
+hdmi_group=1
+hdmi_mode=16  # 1080p 60Hz
+
+# Clock & Power Optimizations for Consistent Real-Time Latency
+arm_freq=1500
+over_voltage=0
