@@ -106,9 +106,15 @@
         <div class="brand-sub">Target Platform: Raspberry Pi 4 (QNX Neutrino RTOS v7.1)</div>
       </div>
     </div>
-    <div class="status-badge" id="sys-status-badge">
-      <div class="status-dot" id="sys-status-dot"></div>
-      <span id="sys-status-text">SYSTEM NORMAL [OPTIMAL]</span>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted);text-align:right;">
+        <div>Packets RX: <span id="pkt-count" style="color:var(--accent-cyan);">0</span></div>
+        <div>Last RX: <span id="pkt-age" style="color:var(--accent-cyan);">--</span></div>
+      </div>
+      <div class="status-badge" id="sys-status-badge">
+        <div class="status-dot" id="sys-status-dot"></div>
+        <span id="sys-status-text">AWAITING DATA</span>
+      </div>
     </div>
   </div>
 
@@ -123,10 +129,10 @@
           <span class="card-title">🚦 Traffic Subsystem</span>
           <span class="card-tag tag-online" id="tag-traffic">ONLINE</span>
         </div>
-        <div class="metric-row"><span class="metric-label">Speed / Flow</span><span class="metric-val" id="val-traffic-speed">45.0 km/h</span></div>
-        <div class="metric-row"><span class="metric-label">Vehicle Count</span><span class="metric-val" id="val-traffic-vehicles">124 vehicles</span></div>
-        <div class="metric-row"><span class="metric-label">Congestion Level</span><span class="metric-val" id="val-traffic-congestion">LOW (24%)</span></div>
-        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-traffic">12.4 ms</span></div>
+        <div class="metric-row"><span class="metric-label">Speed / Flow</span><span class="metric-val" id="val-traffic-speed">-- km/h</span></div>
+        <div class="metric-row"><span class="metric-label">IR Sensor</span><span class="metric-val" id="val-traffic-ir">Waiting...</span></div>
+        <div class="metric-row"><span class="metric-label">Congestion</span><span class="metric-val" id="val-traffic-congestion">--</span></div>
+        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-traffic">-- ms</span></div>
       </div>
 
       <!-- Subsystem 2: Smart Power Grid -->
@@ -135,10 +141,10 @@
           <span class="card-title">⚡ Smart Power Grid</span>
           <span class="card-tag tag-online" id="tag-power">ONLINE</span>
         </div>
-        <div class="metric-row"><span class="metric-label">Grid Load</span><span class="metric-val" id="val-power-load">410.0 MW</span></div>
-        <div class="metric-row"><span class="metric-label">Generation Output</span><span class="metric-val">485.0 MW</span></div>
-        <div class="metric-row"><span class="metric-label">Grid Stability</span><span class="metric-val" style="color:var(--accent-green);">OPTIMAL (99.8%)</span></div>
-        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-power">18.1 ms</span></div>
+        <div class="metric-row"><span class="metric-label">Grid Load</span><span class="metric-val" id="val-power-load">-- MW</span></div>
+        <div class="metric-row"><span class="metric-label">Ambient Temp (DHT11)</span><span class="metric-val" id="val-power-temp">--</span></div>
+        <div class="metric-row"><span class="metric-label">Grid Stability</span><span class="metric-val" id="val-power-stability" style="color:var(--accent-green);">--</span></div>
+        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-power">-- ms</span></div>
       </div>
 
       <!-- Subsystem 3: Water Network -->
@@ -147,10 +153,10 @@
           <span class="card-title">💧 Water Pressure Net</span>
           <span class="card-tag tag-online" id="tag-water">ONLINE</span>
         </div>
-        <div class="metric-row"><span class="metric-label">Main Line Pressure</span><span class="metric-val" id="val-water-psi">65.0 PSI</span></div>
-        <div class="metric-row"><span class="metric-label">Tank Reservoir</span><span class="metric-val">84.2 %</span></div>
-        <div class="metric-row"><span class="metric-label">Water Quality index</span><span class="metric-val">EXCELLENT (98%)</span></div>
-        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-water">22.5 ms</span></div>
+        <div class="metric-row"><span class="metric-label">Pressure Index</span><span class="metric-val" id="val-water-psi">-- PSI</span></div>
+        <div class="metric-row"><span class="metric-label">Humidity (DHT11)</span><span class="metric-val" id="val-water-hum">--</span></div>
+        <div class="metric-row"><span class="metric-label">Water Quality</span><span class="metric-val" id="val-water-quality">--</span></div>
+        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-water">-- ms</span></div>
       </div>
 
       <!-- Subsystem 4: Environmental AQI -->
@@ -159,10 +165,10 @@
           <span class="card-title">🌱 Environmental AQI</span>
           <span class="card-tag tag-online" id="tag-air">ONLINE</span>
         </div>
-        <div class="metric-row"><span class="metric-label">Air Quality Index</span><span class="metric-val" id="val-air-aqi">28 AQI (GOOD)</span></div>
-        <div class="metric-row"><span class="metric-label">Ambient Temp</span><span class="metric-val">24.5 °C</span></div>
-        <div class="metric-row"><span class="metric-label">Relative Humidity</span><span class="metric-val">58 %</span></div>
-        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-air">45.0 ms</span></div>
+        <div class="metric-row"><span class="metric-label">AQI (MQ135)</span><span class="metric-val" id="val-air-aqi">-- AQI</span></div>
+        <div class="metric-row"><span class="metric-label">Gas Status</span><span class="metric-val" id="val-air-gas">--</span></div>
+        <div class="metric-row"><span class="metric-label">Air Quality</span><span class="metric-val" id="val-air-quality">--</span></div>
+        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-air">-- ms</span></div>
       </div>
 
     </div>
@@ -314,19 +320,34 @@
       }
     }
 
-    function renderTelemetry(data) {
-      // RTOS Metrics
-      document.getElementById('rtos-latency').innerText = `${data.sync_latency_ms.toFixed(2)} ms`;
-      document.getElementById('rtos-peak').innerText = `${data.max_latency_ms.toFixed(1)} ms`;
-      document.getElementById('rtos-misses').innerText = data.deadline_misses;
-      document.getElementById('rtos-stale').innerText = data.stale_count;
+    let _totalPkts = 0;
 
-      const badge = document.getElementById('sys-status-badge');
-      const badgeText = document.getElementById('sys-status-text');
+    function renderTelemetry(data) {
+      // Packet counter
+      _totalPkts = data.total_ticks || _totalPkts;
+      document.getElementById('pkt-count').innerText = _totalPkts;
+
+      // Last RX age
+      const age = data.last_rx_time ? ((Date.now()/1000) - data.last_rx_time).toFixed(1) + 's ago' : '--';
+      document.getElementById('pkt-age').innerText = age;
+
+      // RTOS Metrics
+      document.getElementById('rtos-latency').innerText = `${(data.sync_latency_ms||0).toFixed(2)} ms`;
+      document.getElementById('rtos-peak').innerText    = `${(data.max_latency_ms||0).toFixed(1)} ms`;
+      document.getElementById('rtos-misses').innerText  = data.deadline_misses || 0;
+      document.getElementById('rtos-stale').innerText   = data.stale_count || 0;
+      document.getElementById('rtos-wd').innerText      = data.watchdog || 'UNKNOWN';
+
+      const badge    = document.getElementById('sys-status-badge');
+      const badgeText= document.getElementById('sys-status-text');
       const badgeDot = document.getElementById('sys-status-dot');
 
-      if (data.stale_count > 0) {
-        badgeText.innerText = `SYSTEM DEGRADED (${data.stale_count} STALE SENSOR)`;
+      const sc = data.stale_count || 0;
+      if (!data.connected) {
+        badgeText.innerText = 'AWAITING PI CONNECTION...';
+        badge.style.borderColor = 'rgba(245, 158, 11, 0.4)'; badge.style.color = '#f59e0b'; badgeDot.style.background = '#f59e0b';
+      } else if (sc > 0) {
+        badgeText.innerText = `DEGRADED [${sc} STALE]`;
         badge.style.borderColor = 'rgba(239, 68, 68, 0.4)'; badge.style.color = '#ef4444'; badgeDot.style.background = '#ef4444';
       } else {
         badgeText.innerText = 'SYSTEM NORMAL [OPTIMAL]';
@@ -334,25 +355,74 @@
       }
 
       // Streams
-      if (data.streams) {
-        updateStreamCard('traffic', data.streams.traffic, 'val-traffic-speed');
-        updateStreamCard('power', data.streams.power, 'val-power-load');
-        updateStreamCard('water', data.streams.water, 'val-water-psi');
-        updateStreamCard('air', data.streams.air, 'val-air-aqi');
+      if (!data.streams) return;
+      const s = data.streams;
+
+      // Traffic — IR sensor
+      updateStreamTag('traffic', s.traffic);
+      if (s.traffic) {
+        const spd = s.traffic.val || 0;
+        document.getElementById('val-traffic-speed').innerText = `${spd.toFixed(1)} km/h`;
+        document.getElementById('fresh-traffic').innerText     = `${(s.traffic.freshness_ms||0).toFixed(1)} ms`;
+        // Derive vehicle count from speed: count = (speed-30)/5.5
+        const vCount = Math.max(0, Math.round((spd - 30) / 5.5));
+        document.getElementById('val-traffic-ir').innerText      = `${vCount} vehicles passed`;
+        const pct = Math.min(100, Math.round(spd / 1.2));
+        const lvl = spd < 40 ? 'LOW' : spd < 75 ? 'MODERATE' : 'HIGH';
+        document.getElementById('val-traffic-congestion').innerText = `${lvl} (${pct}%)`;
+      }
+
+      // Power — DHT11 temperature
+      updateStreamTag('power', s.power);
+      if (s.power) {
+        const mw = s.power.val || 0;
+        document.getElementById('val-power-load').innerText = `${mw.toFixed(1)} MW`;
+        document.getElementById('fresh-power').innerText    = `${(s.power.freshness_ms||0).toFixed(1)} ms`;
+        // Reverse-map MW → temp: temp = (MW - 350) / 5 + 20
+        const tempEst = ((mw - 350) / 5 + 20).toFixed(1);
+        document.getElementById('val-power-temp').innerText      = `${tempEst} °C (estimated)`;
+        const stab = mw < 400 ? 'LOW DEMAND' : mw < 480 ? 'OPTIMAL' : 'HIGH LOAD';
+        document.getElementById('val-power-stability').innerText = stab;
+      }
+
+      // Water — DHT11 humidity
+      updateStreamTag('water', s.water);
+      if (s.water) {
+        const psi = s.water.val || 0;
+        document.getElementById('val-water-psi').innerText = `${psi.toFixed(1)} PSI`;
+        document.getElementById('fresh-water').innerText   = `${(s.water.freshness_ms||0).toFixed(1)} ms`;
+        // Reverse-map PSI → humidity: hum = (PSI - 50) / 0.3
+        const humEst = Math.min(100, Math.max(0, ((psi - 50) / 0.3))).toFixed(0);
+        document.getElementById('val-water-hum').innerText     = `${humEst} % RH (DHT11)`;
+        const wq = psi > 70 ? 'EXCELLENT (98%)' : psi > 55 ? 'GOOD (92%)' : 'LOW PRESSURE';
+        document.getElementById('val-water-quality').innerText = wq;
+      }
+
+      // Air — MQ135 gas sensor
+      updateStreamTag('air', s.air);
+      if (s.air) {
+        const aqi = s.air.val || 0;
+        document.getElementById('val-air-aqi').innerText   = `${aqi.toFixed(0)} AQI`;
+        document.getElementById('fresh-air').innerText     = `${(s.air.freshness_ms||0).toFixed(1)} ms`;
+        const gasStatus = aqi > 70 ? '⚠️ GAS DETECTED (MQ135 LOW)' : '✅ Clean Air';
+        const airQual   = aqi < 50 ? 'GOOD' : aqi < 100 ? 'MODERATE' : 'UNHEALTHY';
+        document.getElementById('val-air-gas').innerText     = gasStatus;
+        document.getElementById('val-air-quality').innerText = airQual;
+      }
+    }
+
+    function updateStreamTag(sid, sData) {
+      const tag = document.getElementById(`tag-${sid}`);
+      if (!tag) return;
+      if (!sData || sData.stale) {
+        tag.innerText = 'STALE'; tag.className = 'card-tag tag-stale';
+      } else {
+        tag.innerText = 'LIVE';  tag.className = 'card-tag tag-online';
       }
     }
 
     function updateStreamCard(sid, sData, valElId) {
-      if (!sData) return;
-      document.getElementById(valElId).innerText = `${sData.val.toFixed(1)} ${sData.unit}`;
-      document.getElementById(`fresh-${sid}`).innerText = `${sData.freshness_ms.toFixed(1)} ms`;
-
-      const tag = document.getElementById(`tag-${sid}`);
-      if (sData.stale) {
-        tag.innerText = 'STALE FAULT'; tag.className = 'card-tag tag-stale';
-      } else {
-        tag.innerText = 'ONLINE'; tag.className = 'card-tag tag-online';
-      }
+      // kept for backward compat — now unused but safe
     }
 
     function injectFault(action) {
