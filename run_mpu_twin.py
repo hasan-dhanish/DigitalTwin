@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# Host PC Receiver & 3D MPU6050 Orientation Server
-# Listens on UDP Port 9998 for QNX Pi MPU sensor packets and hosts a web server
-# on Port 8090 with real-time 3D Cuboid rendering & live orientation telemetry.
+# Host PC Receiver & 3D MPU6050 Orientation Server (Zero-Latency SSE Stream)
+# Listens on UDP Port 9998 for QNX Pi MPU sensor packets and hosts a WebServer
+# on Port 8090 with instant real-time Server-Sent Events (SSE) push.
 # ==============================================================================
 
 import socket
@@ -17,7 +17,7 @@ import socketserver
 UDP_PORT = 9998
 HTTP_PORT = 8090
 
-# Global latest pose state
+# Global latest pose state & subscribers
 g_pose = {
     "pitch": 0.0,
     "roll": 0.0,
@@ -46,21 +46,48 @@ def udp_listener():
             payload = json.loads(data.decode('utf-8'))
             payload["last_received"] = time.time()
             g_pose.update(payload)
-        except Exception as e:
+        except Exception:
             pass
 
 # ------------------------------------------------------------------------------
-# Web Server & Telemetry API Handler
+# Web Server & Real-Time SSE Stream Handler
 # ------------------------------------------------------------------------------
 class MPUTwinHTTPHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/api/mpu':
+        if self.path == '/api/mpu/stream':
+            # Server-Sent Events (SSE) Push Connection
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Connection', 'keep-alive')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+
+            try:
+                while True:
+                    now = time.time()
+                    data = dict(g_pose)
+                    if data["last_received"] > 0:
+                        data["freshness_ms"] = round((now - data["last_received"]) * 1000.0, 1)
+                        data["online"] = data["freshness_ms"] < 1000.0
+                    else:
+                        data["freshness_ms"] = 9999.0
+                        data["online"] = False
+
+                    msg = f"data: {json.dumps(data)}\n\n"
+                    self.wfile.write(msg.encode('utf-8'))
+                    self.wfile.flush()
+                    time.sleep(0.02)  # 50 Hz push stream
+            except (ConnectionResetError, BrokenPipeError):
+                pass
+
+        elif self.path == '/api/mpu':
+            # Fallback JSON polling endpoint
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             
-            # Add online freshness calculation
             now = time.time()
             data = dict(g_pose)
             if data["last_received"] > 0:
@@ -75,7 +102,7 @@ class MPUTwinHTTPHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def log_message(self, format, *args):
-        pass  # Suppress HTTP access logs to keep CLI clean
+        pass  # Suppress HTTP access logs
 
 def start_http_server():
     web_dir = os.path.dirname(os.path.abspath(__file__))
@@ -103,7 +130,7 @@ def main():
 
     time.sleep(0.5)
 
-    print("\n[READY] Server running! Launching CLI monitor...")
+    print("\n[READY] Zero-latency SSE Server active!")
     print(f"👉 Open 3D Visualizer: http://localhost:{HTTP_PORT}/mpu_3d_visualizer.html\n")
 
     try:

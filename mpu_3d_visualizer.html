@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QNX MPU6050 Live 3D Sensor Digital Twin</title>
+  <title>QNX MPU6050 Live 3D Sensor Digital Twin (Zero Latency Stream)</title>
 
   <!-- Google Fonts & Three.js -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,8 +16,8 @@
   <style>
     :root {
       --bg-dark: #070913;
-      --panel-bg: rgba(15, 23, 42, 0.75);
-      --panel-border: rgba(56, 189, 248, 0.2);
+      --panel-bg: rgba(15, 23, 42, 0.85);
+      --panel-border: rgba(56, 189, 248, 0.25);
       --accent-cyan: #00f2fe;
       --accent-blue: #3b82f6;
       --accent-pink: #ec4899;
@@ -27,343 +27,141 @@
       --text-muted: #94a3b8;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
-    }
-
-    body {
-      font-family: 'Outfit', sans-serif;
-      background-color: var(--bg-dark);
-      color: var(--text-main);
-      overflow: hidden;
-      width: 100vw;
-      height: 100vh;
-    }
-
-    #webgl-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body { font-family: 'Outfit', sans-serif; background-color: var(--bg-dark); color: var(--text-main); overflow: hidden; width: 100vw; height: 100vh; }
+    #webgl-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 
     /* Top Navigation Header */
     .header-bar {
-      position: absolute;
-      top: 20px;
-      left: 24px;
-      right: 24px;
-      z-index: 10;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: var(--panel-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--panel-border);
-      border-radius: 16px;
-      padding: 14px 24px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      position: absolute; top: 20px; left: 24px; right: 24px; z-index: 10;
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--panel-bg); backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border); border-radius: 16px; padding: 14px 24px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
+    .brand { display: flex; align-items: center; gap: 14px; }
     .brand-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
+      width: 40px; height: 40px; border-radius: 10px;
       background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      font-size: 20px;
-      color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 20px; color: #000;
       box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
     }
-
-    .brand-title {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      background: linear-gradient(to right, #fff, #93c5fd);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .brand-sub {
-      font-size: 12px;
-      color: var(--text-muted);
-      font-weight: 400;
-    }
+    .brand-title { font-size: 18px; font-weight: 700; background: linear-gradient(to right, #fff, #93c5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .brand-sub { font-size: 12px; color: var(--text-muted); }
 
     .status-badge {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--accent-green);
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 8px 16px; border-radius: 20px;
+      font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--accent-green);
     }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background-color: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); animation: pulse 1.5s infinite; }
 
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background-color: var(--accent-green);
-      box-shadow: 0 0 10px var(--accent-green);
-      animation: pulse 1.5s infinite;
-    }
-
-    @keyframes pulse {
-      0% { transform: scale(0.9); opacity: 0.8; }
-      50% { transform: scale(1.2); opacity: 1; }
-      100% { transform: scale(0.9); opacity: 0.8; }
-    }
+    @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.8; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.8; } }
 
     /* Left Floating Dashboard Panel */
-    .left-panel {
-      position: absolute;
-      top: 96px;
-      left: 24px;
-      width: 320px;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .card {
-      background: var(--panel-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--panel-border);
-      border-radius: 16px;
-      padding: 20px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    }
-
-    .card-title {
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--text-muted);
-      margin-bottom: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
+    .left-panel { position: absolute; top: 96px; left: 24px; width: 320px; z-index: 10; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: var(--panel-bg); backdrop-filter: blur(16px); border: 1px solid var(--panel-border); border-radius: 16px; padding: 18px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4); }
+    .card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
 
     /* Orientation Gauges */
-    .angle-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-    }
-
-    .angle-box {
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 12px;
-      padding: 12px 8px;
-      text-align: center;
-    }
-
-    .angle-label {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 4px;
-      font-weight: 600;
-    }
-
-    .angle-val {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 18px;
-      font-weight: 700;
-    }
+    .angle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .angle-box { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 10px 6px; text-align: center; }
+    .angle-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; }
+    .angle-val { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; }
 
     .pitch-val { color: var(--accent-cyan); }
     .roll-val  { color: var(--accent-pink); }
     .yaw-val   { color: var(--accent-yellow); }
 
-    /* Telemetry Vectors */
-    .vec-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
-      padding: 6px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
+    .vec-row { display: flex; justify-content: space-between; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 5px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
     .vec-row:last-child { border-bottom: none; }
-
     .vec-tag { color: var(--text-muted); }
     .vec-num { font-weight: 600; }
 
     /* Bottom Control Bar */
     .bottom-controls {
-      position: absolute;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 10;
-      display: flex;
-      gap: 12px;
-      background: var(--panel-bg);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--panel-border);
-      border-radius: 30px;
-      padding: 8px 16px;
+      position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 10;
+      display: flex; gap: 12px; background: var(--panel-bg); backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border); border-radius: 30px; padding: 8px 16px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
-
     .btn {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: var(--text-main);
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-family: 'Outfit', sans-serif;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-main); padding: 8px 16px; border-radius: 20px;
+      font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;
     }
+    .btn:hover { background: rgba(0, 242, 254, 0.2); border-color: var(--accent-cyan); color: #fff; }
+    .btn-active { background: var(--accent-blue); border-color: var(--accent-blue); }
 
-    .btn:hover {
-      background: rgba(0, 242, 254, 0.2);
-      border-color: var(--accent-cyan);
-      color: #fff;
-      box-shadow: 0 0 12px rgba(0, 242, 254, 0.3);
-    }
-
-    .btn-active {
-      background: var(--accent-blue);
-      border-color: var(--accent-blue);
-    }
-
-    /* 3D Canvas Orientation Compass Indicator */
     .orientation-overlay {
-      position: absolute;
-      right: 24px;
-      bottom: 24px;
-      z-index: 10;
-      background: var(--panel-bg);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--panel-border);
-      border-radius: 16px;
-      padding: 16px;
-      width: 220px;
+      position: absolute; right: 24px; bottom: 24px; z-index: 10;
+      background: var(--panel-bg); backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border); border-radius: 16px; padding: 16px; width: 220px;
     }
   </style>
 </head>
 <body>
 
-  <!-- WebGL Render Canvas -->
   <canvas id="webgl-canvas"></canvas>
 
-  <!-- Top Header -->
   <div class="header-bar">
     <div class="brand">
       <div class="brand-icon">MPU</div>
       <div>
-        <div class="brand-title">QNX 3D Sensor Digital Twin</div>
-        <div class="brand-sub">Real-Time IMU Orientation & Motion Simulator</div>
+        <div class="brand-title">QNX 3D Sensor Digital Twin (Zero Latency)</div>
+        <div class="brand-sub">Real-Time IMU Stream (UDP / SSE Push)</div>
       </div>
     </div>
     <div class="status-badge" id="status-pill">
       <div class="status-dot" id="status-dot"></div>
-      <span id="status-text">CONNECTING TO QNX...</span>
+      <span id="status-text">CONNECTING TO STREAM...</span>
     </div>
   </div>
 
-  <!-- Left Telemetry Panel -->
   <div class="left-panel">
-
-    <!-- 3D Pose Angels -->
     <div class="card">
       <div class="card-title">
         <span>3D Orientation Angles</span>
-        <span style="font-size:10px; color:var(--accent-cyan);">COMPLEMENTARY FILTER</span>
+        <span style="font-size:10px; color:var(--accent-cyan);">INSTANT 1:1 POSES</span>
       </div>
       <div class="angle-grid">
-        <div class="angle-box">
-          <div class="angle-label">PITCH (X)</div>
-          <div class="angle-val pitch-val" id="val-pitch">0.0°</div>
-        </div>
-        <div class="angle-box">
-          <div class="angle-label">ROLL (Y)</div>
-          <div class="angle-val roll-val" id="val-roll">0.0°</div>
-        </div>
-        <div class="angle-box">
-          <div class="angle-label">YAW (Z)</div>
-          <div class="angle-val yaw-val" id="val-yaw">0.0°</div>
-        </div>
+        <div class="angle-box"><div class="angle-label">PITCH (X)</div><div class="angle-val pitch-val" id="val-pitch">0.0°</div></div>
+        <div class="angle-box"><div class="angle-label">ROLL (Y)</div><div class="angle-val roll-val" id="val-roll">0.0°</div></div>
+        <div class="angle-box"><div class="angle-label">YAW (Z)</div><div class="angle-val yaw-val" id="val-yaw">0.0°</div></div>
       </div>
     </div>
 
-    <!-- Accelerometer Telemetry -->
     <div class="card">
-      <div class="card-title">
-        <span>3-Axis Accelerometer</span>
-        <span>UNIT: g</span>
-      </div>
+      <div class="card-title"><span>3-Axis Accelerometer</span><span>UNIT: g</span></div>
       <div class="vec-row"><span class="vec-tag">Accel X</span><span class="vec-num" id="acc-x">0.000 g</span></div>
       <div class="vec-row"><span class="vec-tag">Accel Y</span><span class="vec-num" id="acc-y">0.000 g</span></div>
       <div class="vec-row"><span class="vec-tag">Accel Z</span><span class="vec-num" id="acc-z">1.000 g</span></div>
     </div>
 
-    <!-- Gyroscope Telemetry -->
     <div class="card">
-      <div class="card-title">
-        <span>3-Axis Gyroscope</span>
-        <span>UNIT: °/s</span>
-      </div>
+      <div class="card-title"><span>3-Axis Gyroscope</span><span>UNIT: °/s</span></div>
       <div class="vec-row"><span class="vec-tag">Gyro X</span><span class="vec-num" id="gyro-x">0.00 °/s</span></div>
       <div class="vec-row"><span class="vec-tag">Gyro Y</span><span class="vec-num" id="gyro-y">0.00 °/s</span></div>
       <div class="vec-row"><span class="vec-tag">Gyro Z</span><span class="vec-num" id="gyro-z">0.00 °/s</span></div>
     </div>
 
-    <!-- Link Metrics -->
     <div class="card">
-      <div class="card-title">
-        <span>QNX Link Stats</span>
-      </div>
-      <div class="vec-row"><span class="vec-tag">Refresh Latency</span><span class="vec-num" id="freshness-val">0.0 ms</span></div>
-      <div class="vec-row"><span class="vec-tag">Packet Counter</span><span class="vec-num" id="pkt-count">0</span></div>
-      <div class="vec-row"><span class="vec-tag">Sensor Mode</span><span class="vec-num" style="color:var(--accent-cyan);" id="mode-val">INIT</span></div>
+      <div class="card-title"><span>Stream Stats</span></div>
+      <div class="vec-row"><span class="vec-tag">Latency</span><span class="vec-num" id="freshness-val">0.0 ms</span></div>
+      <div class="vec-row"><span class="vec-tag">Packets Received</span><span class="vec-num" id="pkt-count">0</span></div>
+      <div class="vec-row"><span class="vec-tag">Protocol Stream</span><span class="vec-num" style="color:var(--accent-cyan);" id="mode-val">SSE / UDP</span></div>
     </div>
-
   </div>
 
-  <!-- Bottom Quick Controls -->
   <div class="bottom-controls">
-    <button class="btn" onclick="resetCamera()">🎯 Reset Camera</button>
+    <button class="btn" onclick="resetCamera()">🎯 Reset View</button>
     <button class="btn" onclick="zeroCalibration()">⚖️ Zero Calibrate</button>
     <button class="btn" id="btn-grid" onclick="toggleGrid()">🌐 Toggle Grid</button>
     <button class="btn" id="btn-wire" onclick="toggleWireframe()">🕸️ Wireframe</button>
   </div>
 
-  <!-- Right Side Legend -->
   <div class="orientation-overlay">
     <div class="card-title" style="margin-bottom:10px;">Sensor Axis Legend</div>
     <div style="display:flex; flex-direction:column; gap:6px; font-size:12px; font-family:'JetBrains Mono';">
@@ -373,19 +171,16 @@
     </div>
   </div>
 
-  <!-- 3D Graphics Logic (Three.js Engine) -->
   <script>
     let scene, camera, renderer, controls;
-    let sensorBoard, chip, gridHelper;
+    let sensorBoard, gridHelper;
     let zeroPitch = 0, zeroRoll = 0, zeroYaw = 0;
     let targetPitch = 0, targetRoll = 0, targetYaw = 0;
-    let currentPitch = 0, currentRoll = 0, currentYaw = 0;
     let isWireframe = false;
 
     function init3D() {
       const container = document.getElementById('webgl-canvas');
 
-      // Create Scene & Camera
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x070913);
       scene.fog = new THREE.FogExp2(0x070913, 0.03);
@@ -393,77 +188,47 @@
       camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(6, 4, 7);
 
-      // Create Renderer
       renderer = new THREE.WebGLRenderer({ canvas: container, antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.shadowMap.enabled = true;
 
-      // Orbit Controls
       controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
 
-      // Lighting Setup
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-      scene.add(ambientLight);
-
+      scene.add(new THREE.AmbientLight(0xffffff, 0.6));
       const dirLight1 = new THREE.DirectionalLight(0x00f2fe, 1.2);
       dirLight1.position.set(10, 15, 10);
-      dirLight1.castShadow = true;
       scene.add(dirLight1);
 
-      const dirLight2 = new THREE.DirectionalLight(0xec4899, 0.8);
-      dirLight2.position.set(-10, -10, -10);
-      scene.add(dirLight2);
-
-      // Grid Floor
       gridHelper = new THREE.GridHelper(20, 40, 0x00f2fe, 0x1e293b);
       gridHelper.position.y = -2;
       scene.add(gridHelper);
 
-      // Create MPU6050 3D Cuboid Board Group
+      // Create MPU6050 3D Board
       sensorBoard = new THREE.Group();
 
-      // Main PCB Board (Blue Matte Plastic)
-      const pcbGeometry = new THREE.BoxGeometry(3.5, 0.2, 2.5);
-      const pcbMaterial = new THREE.MeshStandardMaterial({
-        color: 0x0f3460,
-        roughness: 0.3,
-        metalness: 0.2
-      });
-      const pcbMesh = new THREE.Mesh(pcbGeometry, pcbMaterial);
-      pcbMesh.castShadow = true;
+      const pcbMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(3.5, 0.2, 2.5),
+        new THREE.MeshStandardMaterial({ color: 0x0f3460, roughness: 0.3, metalness: 0.2 })
+      );
       sensorBoard.add(pcbMesh);
 
-      // Main IC Chip (Black Silicon)
-      const chipGeometry = new THREE.BoxGeometry(0.8, 0.12, 0.8);
-      const chipMaterial = new THREE.MeshStandardMaterial({
-        color: 0x111111,
-        roughness: 0.1,
-        metalness: 0.8
-      });
-      chip = new THREE.Mesh(chipGeometry, chipMaterial);
+      const chip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.12, 0.8),
+        new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.8 })
+      );
       chip.position.set(0, 0.15, 0);
       sensorBoard.add(chip);
 
-      // Pin Headers (Gold Pins)
-      const pinMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9, roughness: 0.1 });
+      const pinMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9 });
       for (let i = -1.2; i <= 1.2; i += 0.35) {
-        const pinGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.6);
-        const pinMesh = new THREE.Mesh(pinGeom, pinMat);
+        const pinMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6), pinMat);
         pinMesh.position.set(i, 0.1, -1.0);
         sensorBoard.add(pinMesh);
       }
 
-      // Status LED (Glowing Cyan Dot)
-      const ledGeom = new THREE.SphereGeometry(0.1, 16, 16);
-      const ledMat = new THREE.MeshBasicMaterial({ color: 0x00f2fe });
-      const ledMesh = new THREE.Mesh(ledGeom, ledMat);
-      ledMesh.position.set(1.4, 0.15, 0.9);
-      sensorBoard.add(ledMesh);
-
-      // 3D Axis Indicators on the Cuboid
       const axisHelper = new THREE.AxesHelper(1.8);
       axisHelper.position.set(0, 0.2, 0);
       sensorBoard.add(axisHelper);
@@ -471,21 +236,17 @@
       scene.add(sensorBoard);
 
       window.addEventListener('resize', onWindowResize);
+      connectEventStream();
       animate();
     }
 
     function animate() {
       requestAnimationFrame(animate);
 
-      // Smooth Rotation Interpolation (Lerp for silky smooth 60fps movement)
-      currentPitch += (targetPitch - currentPitch) * 0.15;
-      currentRoll  += (targetRoll  - currentRoll)  * 0.15;
-      currentYaw   += (targetYaw   - currentYaw)   * 0.15;
-
-      // Apply Euler Rotations (converting degrees to radians)
-      sensorBoard.rotation.x = THREE.MathUtils.degToRad(currentPitch - zeroPitch);
-      sensorBoard.rotation.z = THREE.MathUtils.degToRad(currentRoll  - zeroRoll);
-      sensorBoard.rotation.y = THREE.MathUtils.degToRad(currentYaw   - zeroYaw);
+      // INSTANT DIRECT 1:1 ROTATION (No slow lerp delays!)
+      sensorBoard.rotation.x = THREE.MathUtils.degToRad(targetPitch - zeroPitch);
+      sensorBoard.rotation.z = THREE.MathUtils.degToRad(targetRoll  - zeroRoll);
+      sensorBoard.rotation.y = THREE.MathUtils.degToRad(targetYaw   - zeroYaw);
 
       controls.update();
       renderer.render(scene, camera);
@@ -515,70 +276,81 @@
 
     function toggleWireframe() {
       isWireframe = !isWireframe;
-      sensorBoard.children.forEach(child => {
-        if (child.material) child.material.wireframe = isWireframe;
-      });
+      sensorBoard.children.forEach(child => { if (child.material) child.material.wireframe = isWireframe; });
       document.getElementById('btn-wire').classList.toggle('btn-active');
     }
 
     // -------------------------------------------------------------------------
-    // Real-Time Telemetry Polling from Host PC Engine (/api/mpu)
+    // Server-Sent Events (SSE Push) for ZERO-LATENCY Instant Streaming
     // -------------------------------------------------------------------------
-    async function fetchTelemetry() {
-      try {
-        const response = await fetch('/api/mpu');
-        if (response.ok) {
-          const data = await response.json();
+    function connectEventStream() {
+      const evtSource = new EventSource('/api/mpu/stream');
 
-          targetPitch = data.pitch || 0.0;
-          targetRoll  = data.roll  || 0.0;
-          targetYaw   = data.yaw   || 0.0;
+      evtSource.onmessage = function(e) {
+        try {
+          const data = JSON.parse(e.data);
+          updateUI(data);
+        } catch(err){}
+      };
 
-          document.getElementById('val-pitch').innerText = `${targetPitch.toFixed(1)}°`;
-          document.getElementById('val-roll').innerText  = `${targetRoll.toFixed(1)}°`;
-          document.getElementById('val-yaw').innerText   = `${targetYaw.toFixed(1)}°`;
+      evtSource.onerror = function() {
+        // Fallback polling if SSE drops
+        fetchFallback();
+      };
+    }
 
-          if (data.accel) {
-            document.getElementById('acc-x').innerText = `${data.accel.x.toFixed(3)} g`;
-            document.getElementById('acc-y').innerText = `${data.accel.y.toFixed(3)} g`;
-            document.getElementById('acc-z').innerText = `${data.accel.z.toFixed(3)} g`;
-          }
+    function updateUI(data) {
+      targetPitch = data.pitch || 0.0;
+      targetRoll  = data.roll  || 0.0;
+      targetYaw   = data.yaw   || 0.0;
 
-          if (data.gyro) {
-            document.getElementById('gyro-x').innerText = `${data.gyro.x.toFixed(1)} °/s`;
-            document.getElementById('gyro-y').innerText = `${data.gyro.y.toFixed(1)} °/s`;
-            document.getElementById('gyro-z').innerText = `${data.gyro.z.toFixed(1)} °/s`;
-          }
+      document.getElementById('val-pitch').innerText = `${targetPitch.toFixed(1)}°`;
+      document.getElementById('val-roll').innerText  = `${targetRoll.toFixed(1)}°`;
+      document.getElementById('val-yaw').innerText   = `${targetYaw.toFixed(1)}°`;
 
-          document.getElementById('freshness-val').innerText = `${data.freshness_ms || 0} ms`;
-          document.getElementById('pkt-count').innerText = data.packet_id || 0;
-          document.getElementById('mode-val').innerText = data.mode || 'ONLINE';
+      if (data.accel) {
+        document.getElementById('acc-x').innerText = `${data.accel.x.toFixed(3)} g`;
+        document.getElementById('acc-y').innerText = `${data.accel.y.toFixed(3)} g`;
+        document.getElementById('acc-z').innerText = `${data.accel.z.toFixed(3)} g`;
+      }
+      if (data.gyro) {
+        document.getElementById('gyro-x').innerText = `${data.gyro.x.toFixed(1)} °/s`;
+        document.getElementById('gyro-y').innerText = `${data.gyro.y.toFixed(1)} °/s`;
+        document.getElementById('gyro-z').innerText = `${data.gyro.z.toFixed(1)} °/s`;
+      }
 
-          const pill = document.getElementById('status-pill');
-          const statusText = document.getElementById('status-text');
-          const dot = document.getElementById('status-dot');
+      document.getElementById('freshness-val').innerText = `${data.freshness_ms || 0} ms`;
+      document.getElementById('pkt-count').innerText = data.packet_id || 0;
+      document.getElementById('mode-val').innerText = data.mode || 'ONLINE';
 
-          if (data.online) {
-            statusText.innerText = 'QNX MPU6050 LIVE (ONLINE)';
-            pill.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-            pill.style.color = '#10b981';
-            dot.style.backgroundColor = '#10b981';
-          } else {
-            statusText.innerText = 'WAITING FOR QNX SENSOR STREAM...';
-            pill.style.borderColor = 'rgba(245, 158, 11, 0.4)';
-            pill.style.color = '#f59e0b';
-            dot.style.backgroundColor = '#f59e0b';
-          }
-        }
-      } catch (e) {
-        console.warn('Telemetry fetch error:', e);
+      const pill = document.getElementById('status-pill');
+      const statusText = document.getElementById('status-text');
+      const dot = document.getElementById('status-dot');
+
+      if (data.online) {
+        statusText.innerText = 'QNX MPU6050 LIVE (INSTANT)';
+        pill.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        pill.style.color = '#10b981';
+        dot.style.backgroundColor = '#10b981';
+      } else {
+        statusText.innerText = 'WAITING FOR SENSOR STREAM...';
+        pill.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+        pill.style.color = '#f59e0b';
+        dot.style.backgroundColor = '#f59e0b';
       }
     }
 
-    // Poll at 50 FPS (every 20ms)
-    setInterval(fetchTelemetry, 20);
+    async function fetchFallback() {
+      try {
+        const res = await fetch('/api/mpu');
+        if (res.ok) {
+          const data = await res.json();
+          updateUI(data);
+        }
+      } catch(e){}
+    }
 
-    // Initialize 3D Scene on load
+    setInterval(fetchFallback, 40);
     window.onload = init3D;
   </script>
 </body>
