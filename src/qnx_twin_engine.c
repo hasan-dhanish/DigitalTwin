@@ -12,7 +12,7 @@
    - Atomic Shared Memory State Buffers with POSIX Mutexes
    - POSIX Message Queues (mqueue) for Asynchronous Fault Notifications
    - High-Precision Monotonic Deadline Measurement (clock_gettime)
-   - UDP Telemetry Broadcaster (Port 9999) + TCP JSON Server (Port 8080)
+   - Direct Unicast UDP Telemetry Broadcaster + TCP JSON Server
    ========================================================================== */
 
 #include <stdio.h>
@@ -89,6 +89,9 @@ static stream_config_t g_streams[NUM_STREAMS] = {
     {"air",     "Environmental AQI", 1000,150, 15.0,  85.0,  "AQI",  {}, false, 0.0, false, 28.0}
 };
 
+/* Target Host PC IP Address */
+static char g_host_ip[64] = "127.0.0.1";
+
 /* RTOS Global State */
 static bool g_running = true;
 static double g_current_latency_ms = 0.0;
@@ -100,9 +103,7 @@ static uint64_t g_sync_heartbeat = 0;
 static pthread_mutex_t g_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 static mqd_t g_fault_mq;
 
-/* --------------------------------------------------------------------------
-   Helper Functions
-   -------------------------------------------------------------------------- */
+/* Helper Functions */
 static double get_elapsed_ms(struct timespec start, struct timespec end) {
     return (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_nsec - start.tv_nsec) / 1000000.0;
 }
@@ -132,9 +133,7 @@ static bool ring_buffer_get_latest(circular_ring_buffer_t *rb, sensor_packet_t *
     return true;
 }
 
-/* --------------------------------------------------------------------------
-   Task 1: Data Acquisition Producer Thread (Priority 150)
-   -------------------------------------------------------------------------- */
+/* Producer Thread (Priority 150) */
 static void* sensor_producer_thread(void *arg) {
     stream_config_t *stream = (stream_config_t*)arg;
     struct timespec next_tick;
@@ -158,7 +157,6 @@ static void* sensor_producer_thread(void *arg) {
             ring_buffer_push(&stream->ring_queue, pkt);
         }
 
-        /* Periodic Hard Real-Time Timer Sleep */
         next_tick.tv_nsec += stream->period_ms * 1000000L;
         while (next_tick.tv_nsec >= 1000000000L) {
             next_tick.tv_nsec -= 1000000000L;
@@ -169,22 +167,17 @@ static void* sensor_producer_thread(void *arg) {
     return NULL;
 }
 
-/* --------------------------------------------------------------------------
-   Task 2: Hard Real-Time Twin Synchronizer Core (Priority 255 - Highest)
-   -------------------------------------------------------------------------- */
+/* Synchronizer Core (Priority 255 - Highest) */
 static void* twin_synchronizer_thread(void *arg) {
     struct timespec start_t, end_t, now_t;
 
-    // UDP broadcast socket for streaming packets directly to Host PC
     int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
-    int broadcast_enable = 1;
-    setsockopt(udp_sock, SOL_SOCKET, SO_BROADCAST, &broadcast_enable, sizeof(broadcast_enable));
 
     struct sockaddr_in baddr;
     memset(&baddr, 0, sizeof(baddr));
     baddr.sin_family = AF_INET;
     baddr.sin_port = htons(UDP_PORT);
-    baddr.sin_addr.s_addr = inet_addr("255.255.255.255");
+    baddr.sin_addr.s_addr = inet_addr(g_host_ip);
 
     while (g_running) {
         clock_gettime(CLOCK_MONOTONIC, &start_t);
@@ -206,7 +199,7 @@ static void* twin_synchronizer_thread(void *arg) {
                     g_streams[i].is_stale = false;
                 }
 
-                // Broadcast UDP telemetry packet to Host PC on Port 9999
+                // Send Direct Unicast UDP packet to Host PC IP
                 if (udp_sock >= 0) {
                     char pkt_buf[256];
                     snprintf(pkt_buf, sizeof(pkt_buf), "{\"stream\":\"%s\",\"value\":%.1f}", g_streams[i].id, g_streams[i].last_value);
@@ -227,19 +220,16 @@ static void* twin_synchronizer_thread(void *arg) {
         if (latency > g_max_latency_ms) g_max_latency_ms = latency;
         if (latency > BOUNDED_DEADLINE_MS) g_deadline_misses++;
 
-        /* 10ms Sync Period Sleep */
         usleep(10000);
     }
     if (udp_sock >= 0) close(udp_sock);
     return NULL;
 }
 
-/* --------------------------------------------------------------------------
-   Task 3: Fault Monitor Thread (Priority 180) - POSIX Message Queue
-   -------------------------------------------------------------------------- */
+/* Fault Monitor (Priority 180) */
 static void* fault_monitor_thread(void *arg) {
     while (g_running) {
-        usleep(500000); // 500ms check interval
+        usleep(500000);
 
         pthread_mutex_lock(&g_state_mutex);
         for (int i = 0; i < NUM_STREAMS; i++) {
@@ -250,7 +240,6 @@ static void* fault_monitor_thread(void *arg) {
                 evt.freshness_ms = g_streams[i].freshness_ms;
                 clock_gettime(CLOCK_MONOTONIC, &evt.fault_time);
 
-                /* Send asynchronous fault event over POSIX Message Queue */
                 if (g_fault_mq != (mqd_t)-1) {
                     mq_send(g_fault_mq, (const char*)&evt, sizeof(evt), 10);
                 }
@@ -261,9 +250,7 @@ static void* fault_monitor_thread(void *arg) {
     return NULL;
 }
 
-/* --------------------------------------------------------------------------
-   Task 4: Safety Watchdog Monitor Thread (Priority 200)
-   -------------------------------------------------------------------------- */
+/* Watchdog (Priority 200) */
 static void* watchdog_thread(void *arg) {
     uint64_t last_hb = 0;
     while (g_running) {
@@ -276,9 +263,7 @@ static void* watchdog_thread(void *arg) {
     return NULL;
 }
 
-/* --------------------------------------------------------------------------
-   Task 5: Host PC TCP JSON Snapshot Stream Server (Port 8080)
-   -------------------------------------------------------------------------- */
+/* TCP JSON Server (Port 8080) */
 static void* tcp_host_server_thread(void *arg) {
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) return NULL;
@@ -344,9 +329,6 @@ static void* tcp_host_server_thread(void *arg) {
     return NULL;
 }
 
-/* --------------------------------------------------------------------------
-   CLI Logging Dashboard (Priority 50)
-   -------------------------------------------------------------------------- */
 static void render_cli() {
     printf("\033[H\033[J");
     printf("========================================================================\n");
@@ -356,6 +338,7 @@ static void render_cli() {
            (unsigned long long)g_total_ticks, g_current_latency_ms, BOUNDED_DEADLINE_MS);
     printf(" [SYNC] Max Peak Latency  : %6.2f ms | Deadline Misses: %llu\n", 
            g_max_latency_ms, (unsigned long long)g_deadline_misses);
+    printf(" [SYNC] Target Host PC IP : %s:9999\n", g_host_ip);
     printf(" [WATCHDOG] Synchronizer  : HEALTHY\n");
     printf("------------------------------------------------------------------------\n");
     printf(" REAL-TIME SUBSYSTEM STREAMS & DATA FRESHNESS:\n");
@@ -372,18 +355,17 @@ static void render_cli() {
     printf("========================================================================\n");
 }
 
-/* --------------------------------------------------------------------------
-   Main Function & Thread Orchestration
-   -------------------------------------------------------------------------- */
 int main(int argc, char *argv[]) {
-    printf("Initializing QNX City Digital Twin Synchronization Engine...\n");
+    if (argc > 1) {
+        strncpy(g_host_ip, argv[1], sizeof(g_host_ip) - 1);
+    }
 
-    /* Initialize Ring Buffers */
+    printf("Initializing QNX City Digital Twin Engine (Target Host PC: %s)...\n", g_host_ip);
+
     for (int i = 0; i < NUM_STREAMS; i++) {
         ring_buffer_init(&g_streams[i].ring_queue);
     }
 
-    /* Initialize POSIX Message Queue */
     struct mq_attr attr;
     attr.mq_flags = 0;
     attr.mq_maxmsg = 10;
@@ -395,7 +377,6 @@ int main(int argc, char *argv[]) {
     pthread_t prod_threads[NUM_STREAMS];
     pthread_t sync_thread, fault_thread, wd_thread, tcp_thread;
 
-    /* Create Sensor Producer Threads (Priority 150) */
     for (int i = 0; i < NUM_STREAMS; i++) {
         pthread_create(&prod_threads[i], NULL, sensor_producer_thread, &g_streams[i]);
         struct sched_param param;
@@ -403,31 +384,25 @@ int main(int argc, char *argv[]) {
         pthread_setschedparam(prod_threads[i], SCHED_FIFO, &param);
     }
 
-    /* Create Fault Monitor Thread (Priority 180) */
     pthread_create(&fault_thread, NULL, fault_monitor_thread, NULL);
     struct sched_param fault_param = {.sched_priority = 180};
     pthread_setschedparam(fault_thread, SCHED_FIFO, &fault_param);
 
-    /* Create Watchdog Thread (Priority 200) */
     pthread_create(&wd_thread, NULL, watchdog_thread, NULL);
     struct sched_param wd_param = {.sched_priority = 200};
     pthread_setschedparam(wd_thread, SCHED_FIFO, &wd_param);
 
-    /* Create Host TCP Server Thread (Priority 150) */
     pthread_create(&tcp_thread, NULL, tcp_host_server_thread, NULL);
 
-    /* Create Twin Synchronizer Thread (Priority 255 - Highest) */
     pthread_create(&sync_thread, NULL, twin_synchronizer_thread, NULL);
     struct sched_param sync_param = {.sched_priority = 255};
     pthread_setschedparam(sync_thread, SCHED_FIFO, &sync_param);
 
-    /* Run CLI Dashboard loop */
     while (g_running) {
         render_cli();
         usleep(100000);
     }
 
-    /* Cleanup */
     g_running = false;
     mq_close(g_fault_mq);
     mq_unlink(MQ_FAULT_QUEUE);
