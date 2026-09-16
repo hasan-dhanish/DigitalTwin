@@ -38,7 +38,7 @@ g_pose = {
 # ------------------------------------------------------------------------------
 def udp_listener():
     global g_pose
-    sock = socket.socket(socket.AF_INET, SOCK_DGRAM)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.bind(("0.0.0.0", UDP_PORT))
         print(f"[UDP LISTENER] Active on UDP port {UDP_PORT}")
