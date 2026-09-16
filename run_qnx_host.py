@@ -64,7 +64,6 @@ def udp_receiver():
                 g_telemetry["streams"][sid]["freshness_ms"] = 8.5
                 g_telemetry["streams"][sid]["stale"] = False
                 
-                # Check for dynamic overall system state
                 if g_telemetry["stale_count"] == 0:
                     g_telemetry["system_state"] = "NORMAL [OPTIMAL]"
         except Exception:
@@ -89,7 +88,6 @@ def qnx_tcp_poller():
                 data += chunk
             s.close()
 
-            # Parse JSON body
             body = data.decode('utf-8').split("\r\n\r\n")[-1]
             payload = json.loads(body)
             g_telemetry.update(payload)
@@ -98,38 +96,41 @@ def qnx_tcp_poller():
         time.sleep(0.05)
 
 # ------------------------------------------------------------------------------
-# 3. Web Server Request Handler
+# 3. Web Server Request Handler (With Socket Error Protection)
 # ------------------------------------------------------------------------------
 class HostDashboardHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/api/telemetry':
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps(g_telemetry).encode('utf-8'))
+        try:
+            if self.path == '/api/telemetry':
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(g_telemetry).encode('utf-8'))
 
-        elif self.path.startswith('/api/fault'):
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            
-            action = self.path.split("action=")[-1] if "action=" in self.path else "none"
-            if action == "disconnect":
-                g_telemetry["streams"]["traffic"]["stale"] = True
-                g_telemetry["streams"]["traffic"]["freshness_ms"] = 623.5
-                g_telemetry["stale_count"] = 1
-                g_telemetry["system_state"] = "DEGRADED [STALE FAULT]"
-            elif action == "reset":
-                g_telemetry["streams"]["traffic"]["stale"] = False
-                g_telemetry["streams"]["traffic"]["freshness_ms"] = 12.0
-                g_telemetry["stale_count"] = 0
-                g_telemetry["system_state"] = "NORMAL [OPTIMAL]"
+            elif self.path.startswith('/api/fault'):
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
                 
-            self.wfile.write(json.dumps({"status": "ok", "action": action}).encode('utf-8'))
-        else:
-            super().do_GET()
+                action = self.path.split("action=")[-1] if "action=" in self.path else "none"
+                if action == "disconnect":
+                    g_telemetry["streams"]["traffic"]["stale"] = True
+                    g_telemetry["streams"]["traffic"]["freshness_ms"] = 623.5
+                    g_telemetry["stale_count"] = 1
+                    g_telemetry["system_state"] = "DEGRADED [STALE FAULT]"
+                elif action == "reset":
+                    g_telemetry["streams"]["traffic"]["stale"] = False
+                    g_telemetry["streams"]["traffic"]["freshness_ms"] = 12.0
+                    g_telemetry["stale_count"] = 0
+                    g_telemetry["system_state"] = "NORMAL [OPTIMAL]"
+                    
+                self.wfile.write(json.dumps({"status": "ok", "action": action}).encode('utf-8'))
+            else:
+                super().do_GET()
+        except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+            pass
 
     def log_message(self, format, *args):
         pass
@@ -143,10 +144,7 @@ def main():
     print(f" Web Dashboard Active  : http://localhost:{HTTP_PORT}/city_digital_twin_dashboard.html")
     print("==========================================================================")
 
-    # Start UDP receiver thread
     threading.Thread(target=udp_receiver, daemon=True).start()
-
-    # Start QNX TCP Poller thread
     threading.Thread(target=qnx_tcp_poller, daemon=True).start()
 
     socketserver.TCPServer.allow_reuse_address = True
