@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raspberry Pi 4 Edge Telemetry Dashboard | QNX RTOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: rgba(15, 23, 42, 0.75);
+      --bg-card-border: rgba(56, 189, 248, 0.15);
+      --accent-cyan: #38bdf8;
+      --accent-cyan-glow: rgba(56, 189, 248, 0.4);
+      --accent-green: #22c55e;
+      --accent-green-glow: rgba(34, 197, 94, 0.35);
+      --accent-orange: #f97316;
+      --accent-orange-glow: rgba(249, 115, 22, 0.35);
+      --accent-red: #ef4444;
+      --accent-purple: #a855f7;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --font-display: 'Orbitron', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%),
+        linear-gradient(to bottom, rgba(15, 23, 42, 0.6), rgba(9, 13, 22, 0.95));
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top HUD Navigation Bar */
+    header {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--bg-card-border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .pi-badge {
+      background: linear-gradient(135deg, #c026d3, #7c3aed);
+      color: #fff;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      letter-spacing: 1px;
+      box-shadow: 0 0 12px rgba(192, 38, 211, 0.4);
+    }
+
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: var(--accent-green);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 10px var(--accent-green);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Main Container Grid */
+    main {
+      padding: 32px;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    /* Top Stats Grid */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 16px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stat-value {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    .stat-unit {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-left: 4px;
+    }
+
+    .stat-sub {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-cyan);
+      margin-top: 10px;
+    }
+
+    /* Primary Telemetry Monitors Grid */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 24px;
+    }
+
+    .monitor-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 20px;
+      padding: 28px;
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .icon-box {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .icon-traffic {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    .icon-power {
+      background: rgba(249, 115, 22, 0.15);
+      color: var(--accent-orange);
+      border: 1px solid rgba(249, 115, 22, 0.3);
+    }
+
+    .rate-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Main Gauge Displays */
+    .gauge-container {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .gauge-big {
+      font-family: var(--font-display);
+      font-size: 64px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -1px;
+    }
+
+    .traffic-glow {
+      color: var(--accent-cyan);
+      text-shadow: 0 0 25px var(--accent-cyan-glow);
+    }
+
+    .power-glow {
+      color: var(--accent-orange);
+      text-shadow: 0 0 25px var(--accent-orange-glow);
+    }
+
+    .gauge-unit {
+      font-family: var(--font-mono);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    /* Progress bar visualizer */
+    .bar-track {
+      width: 100%;
+      height: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      transition: width 0.15s ease-out;
+    }
+
+    .fill-traffic {
+      background: linear-gradient(90deg, #0288d1, var(--accent-cyan));
+      box-shadow: 0 0 12px var(--accent-cyan);
+    }
+
+    .fill-power {
+      background: linear-gradient(90deg, #ea580c, var(--accent-orange));
+      box-shadow: 0 0 12px var(--accent-orange);
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .meta-label {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    .meta-val {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    /* Real-Time Live Graph Section */
+    .chart-section {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 20px;
+      padding: 28px;
+    }
+
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .chart-title {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .chart-canvas-wrap {
+      width: 100%;
+      height: 220px;
+      position: relative;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Live Payload Log Console */
+    .console-section {
+      background: #04070d;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 20px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .console-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .console-log {
+      height: 140px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+
+    .log-line {
+      display: flex;
+      gap: 12px;
+      color: var(--text-main);
+    }
+
+    .log-time {
+      color: var(--text-muted);
+      min-width: 90px;
+    }
+
+    .log-tag {
+      color: var(--accent-cyan);
+      font-weight: 700;
+    }
+
+    .log-val {
+      color: var(--accent-green);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-family: var(--font-mono);
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      margin-top: auto;
+    }
+
+    a.link-btn {
+      color: var(--accent-cyan);
+      text-decoration: none;
+      padding: 6px 14px;
+      border: 1px solid var(--accent-cyan);
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    a.link-btn:hover {
+      background: var(--accent-cyan);
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header Overlay -->
+  <header>
+    <div class="brand">
+      <span class="pi-badge">RASPBERRY PI 4 EDGE</span>
+      <h1 class="brand-title">QNX Real-Time Hardware Monitor</h1>
+    </div>
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <a href="city_3d_visualizer.html" class="link-btn">🏙️ Launch 3D City Twin</a>
+      <div class="status-pill" id="live-status-pill">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">CONNECTING TO UDP ENGINE...</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Stat Highlights Bar -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">
+          <span>Sync Latency</span>
+          <span style="color: var(--accent-green);">TARGET &lt; 15ms</span>
+        </div>
+        <div>
+          <span class="stat-value" id="stat-latency">--</span>
+          <span class="stat-unit">ms</span>
+        </div>
+        <div class="stat-sub">Deterministic Snapshot Alignment</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">
+          <span>Data Ingestion Rate</span>
+          <span>UDP PORT 9999</span>
+        </div>
+        <div>
+          <span class="stat-value" id="stat-rate">20</span>
+          <span class="stat-unit">Pkts / sec</span>
+        </div>
+        <div class="stat-sub" id="stat-source">Source: Raspberry Pi (10.11.11.1)</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">
+          <span>RTOS Deadline Misses</span>
+          <span style="color: var(--accent-green);">PREEMPTION LEVEL 255</span>
+        </div>
+        <div>
+          <span class="stat-value" id="stat-misses" style="color: var(--accent-green);">0</span>
+          <span class="stat-unit">missed</span>
+        </div>
+        <div class="stat-sub">Hard Real-Time Guarantees</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">
+          <span>Engine State</span>
+          <span id="state-badge" style="color: var(--accent-green);">OPTIMAL</span>
+        </div>
+        <div>
+          <span class="stat-value" id="stat-state" style="font-size: 22px;">NORMAL</span>
+        </div>
+        <div class="stat-sub">Watchdog Active (150ms timeout)</div>
+      </div>
+    </div>
+
+    <!-- Main Telemetry Gauges -->
+    <div class="telemetry-grid">
+
+      <!-- Card 1: Traffic Telemetry -->
+      <div class="monitor-card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="icon-box icon-traffic">🚗</div>
+            <span>Traffic Telemetry Feed</span>
+          </div>
+          <span class="rate-tag">HC-SR04 ULTRASONIC @ 10 Hz</span>
+        </div>
+
+        <div class="gauge-container">
+          <span class="gauge-big traffic-glow" id="val-traffic">--.--</span>
+          <span class="gauge-unit">km/h</span>
+        </div>
+
+        <div class="bar-track">
+          <div class="bar-fill fill-traffic" id="bar-traffic" style="width: 0%;"></div>
+        </div>
+
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">FRESHNESS</span>
+            <span class="meta-val" id="fresh-traffic">-- ms ago</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">PEAK SPEED</span>
+            <span class="meta-val" id="peak-traffic">99.5 km/h</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">STREAM STATUS</span>
+            <span class="meta-val" style="color: var(--accent-green);" id="status-traffic">ONLINE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: Power Grid Load -->
+      <div class="monitor-card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="icon-box icon-power">⚡</div>
+            <span>Smart Power Grid Feed</span>
+          </div>
+          <span class="rate-tag">PI CPU THERMAL ZONE @ 5 Hz</span>
+        </div>
+
+        <div class="gauge-container">
+          <span class="gauge-big power-glow" id="val-power">---.-</span>
+          <span class="gauge-unit">MW</span>
+        </div>
+
+        <div class="bar-track">
+          <div class="bar-fill fill-power" id="bar-power" style="width: 0%;"></div>
+        </div>
+
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">FRESHNESS</span>
+            <span class="meta-val" id="fresh-power">-- ms ago</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">PI THERMAL TEMP</span>
+            <span class="meta-val" id="pi-temp">~ 42.5 °C</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">STREAM STATUS</span>
+            <span class="meta-val" style="color: var(--accent-green);" id="status-power">ONLINE</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Live Historic Canvas Line Chart -->
+    <div class="chart-section">
+      <div class="chart-header">
+        <div class="chart-title">📈 Real-Time Sensor Telemetry Timeline</div>
+        <div style="font-family: var(--font-mono); font-size: 12px; display: flex; gap: 16px;">
+          <span style="color: var(--accent-cyan);">■ Traffic (km/h)</span>
+          <span style="color: var(--accent-orange);">■ Power Grid Load (MW / 5)</span>
+        </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas id="live-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Live Payload Inspector Terminal -->
+    <div class="console-section">
+      <div class="console-header">
+        <span>📡 Live Raspberry Pi UDP Payload Stream (Port 9999)</span>
+        <span>Auto-scroll Enabled</span>
+      </div>
+      <div class="console-log" id="console-log">
+        <div class="log-line">
+          <span class="log-time">[00:00:00]</span>
+          <span class="log-tag">[SYSTEM]</span>
+          <span>Initializing QNX Telemetry Observer... Waiting for UDP packets.</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer>
+    QNX eHACK 2026 — Problem Statement #48: City Digital Twin Real-Time Synchronization Engine
+  </footer>
+
+  <script>
+    // --- Canvas Live Chart Implementation ---
+    const canvas = document.getElementById('live-chart');
+    const ctx = canvas.getContext('2d');
+    let trafficHistory = new Array(80).fill(0);
+    let powerHistory = new Array(80).fill(0);
+
+    function resizeCanvas() {
+      canvas.width = canvas.parentElement.clientWidth * window.devicePixelRatio;
+      canvas.height = canvas.parentElement.clientHeight * window.devicePixelRatio;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function drawChart() {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      for (let y = 0; y < h; y += h / 4) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Draw Line Helper
+      function drawLine(data, color, maxVal) {
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3 * window.devicePixelRatio;
+        const step = w / (data.length - 1);
+
+        data.forEach((val, i) => {
+          const x = i * step;
+          const norm = Math.min(1, Math.max(0, val / maxVal));
+          const y = h - (norm * (h - 20) + 10);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+
+      drawLine(trafficHistory, '#38bdf8', 110);
+      drawLine(powerHistory, '#f97316', 100);
+    }
+
+    // --- Live API Data Polling ---
+    const logConsole = document.getElementById('console-log');
+    let lastTraffic = -1;
+    let lastPower = -1;
+
+    function appendLog(tag, msg, isVal=false) {
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      const timeStr = new Date().toLocaleTimeString();
+      line.innerHTML = `
+        <span class="log-time">[${timeStr}]</span>
+        <span class="log-tag">${tag}</span>
+        <span class="${isVal ? 'log-val' : ''}">${msg}</span>
+      `;
+      logConsole.appendChild(line);
+      if (logConsole.children.length > 30) {
+        logConsole.removeChild(logConsole.children[0]);
+      }
+      logConsole.scrollTop = logConsole.scrollHeight;
+    }
+
+    async function pollTelemetry() {
+      try {
+        const apiUrl = window.location.protocol.startsWith('http') ? '/api/telemetry' : 'http://localhost:8080/api/telemetry';
+        const res = await fetch(apiUrl);
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (!data || !data.snapshot) return;
+
+        // Update Header Status
+        document.getElementById('live-status-pill').style.borderColor = 'rgba(34, 197, 94, 0.4)';
+        document.getElementById('status-text').textContent = 'UDP EDGE STREAM ACTIVE';
+        document.getElementById('status-dot').style.background = '#22c55e';
+
+        // Stats Bar
+        document.getElementById('stat-latency').textContent = data.sync_latency_ms.toFixed(2);
+        document.getElementById('stat-misses').textContent = data.deadline_misses;
+        document.getElementById('stat-state').textContent = data.system_state.split(' ')[0];
+
+        const snap = data.snapshot;
+
+        // 1. Traffic Feed
+        if (snap.traffic) {
+          const tVal = parseFloat(snap.traffic.val);
+          document.getElementById('val-traffic').textContent = tVal.toFixed(1);
+          document.getElementById('fresh-traffic').textContent = `${snap.traffic.freshness_ms} ms ago`;
+          document.getElementById('bar-traffic').style.width = `${Math.min(100, (tVal / 110) * 100)}%`;
+
+          if (tVal !== lastTraffic) {
+            trafficHistory.shift();
+            trafficHistory.push(tVal);
+            appendLog('[UDP RX]', `Traffic Telemetry Packet: ${tVal.toFixed(1)} km/h`, true);
+            lastTraffic = tVal;
+          }
+        }
+
+        // 2. Power Feed
+        if (snap.power) {
+          const pVal = parseFloat(snap.power.val);
+          document.getElementById('val-power').textContent = pVal.toFixed(1);
+          document.getElementById('fresh-power').textContent = `${snap.power.freshness_ms} ms ago`;
+          document.getElementById('bar-power').style.width = `${Math.min(100, (pVal / 500) * 100)}%`;
+
+          // Estimate Pi CPU Temp from MW load formula
+          const tempEst = 35.0 + ((pVal - 350.0) / 120.0) * 35.0;
+          document.getElementById('pi-temp').textContent = `${Math.max(30, Math.min(85, tempEst)).toFixed(1)} °C`;
+
+          if (pVal !== lastPower) {
+            powerHistory.shift();
+            powerHistory.push(pVal/5); // Scaled for chart
+            appendLog('[UDP RX]', `Power Grid Load Packet: ${pVal.toFixed(1)} MW (Pi Temp: ${tempEst.toFixed(1)}°C)`, true);
+            lastPower = pVal;
+          }
+        }
+
+        drawChart();
+
+      } catch (err) {
+        document.getElementById('status-text').textContent = 'WAITING FOR ENGINE...';
+        document.getElementById('status-dot').style.background = '#ef4444';
+      }
+    }
+
+    setInterval(pollTelemetry, 150);
+  </script>
+</body>
+</html>
