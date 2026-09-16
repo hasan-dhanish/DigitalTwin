@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# Host PC Digital Twin Dashboard & TCP Gateway for QNX RTOS Engine
-# Connects to QNX Pi Engine on TCP 8080 (or UDP 9999) and hosts the 
-# 2D/3D City Digital Twin Dashboard on HTTP Port 8080.
+# Host PC Digital Twin Dashboard & Gateway for QNX RTOS Engine
+# Receives TCP snapshots (Port 8080) and UDP telemetry streams (Port 9999)
+# and hosts the 2D City Digital Twin Dashboard on HTTP Port 8080.
 # ==============================================================================
 
 import socket
@@ -16,6 +16,7 @@ import socketserver
 
 QNX_PI_IP = "127.0.0.1"
 QNX_TCP_PORT = 8080
+UDP_PORT = 9999
 HTTP_PORT = 8080
 
 if len(sys.argv) > 1:
@@ -32,21 +33,52 @@ g_telemetry = {
     "watchdog": "HEALTHY",
     "streams": {
         "traffic": {"val": 45.0, "unit": "km/h", "freshness_ms": 12.4, "stale": False},
-        "power":   {"val": 410.0, "unit": "MW", "freshness_ms": 18.1, "stale": False},
-        "water":   {"val": 65.0, "unit": "PSI", "freshness_ms": 22.5, "stale": False},
-        "air":     {"val": 28.0, "unit": "AQI", "freshness_ms": 45.0, "stale": False}
+        "power":   {"val": 410.0, "unit": "MW",   "freshness_ms": 18.1, "stale": False},
+        "water":   {"val": 65.0,  "unit": "PSI",  "freshness_ms": 22.5, "stale": False},
+        "air":     {"val": 28.0,  "unit": "AQI",  "freshness_ms": 45.0, "stale": False}
     }
 }
 
 # ------------------------------------------------------------------------------
-# QNX TCP Polling Client Thread
+# 1. UDP Receiver Listener (Port 9999)
+# ------------------------------------------------------------------------------
+def udp_receiver():
+    global g_telemetry
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(("0.0.0.0", UDP_PORT))
+        print(f"[UDP RECEIVER] Listening for Pi telemetry packets on UDP port {UDP_PORT}...")
+    except Exception as e:
+        print(f"[UDP NOTICE] Could not bind UDP port {UDP_PORT}: {e}")
+        return
+
+    while True:
+        try:
+            data, addr = sock.recvfrom(2048)
+            payload = json.loads(data.decode('utf-8'))
+            sid = payload.get("stream")
+            val = payload.get("value")
+
+            if sid in g_telemetry["streams"] and val is not None:
+                g_telemetry["streams"][sid]["val"] = float(val)
+                g_telemetry["streams"][sid]["freshness_ms"] = 8.5
+                g_telemetry["streams"][sid]["stale"] = False
+                
+                # Check for dynamic overall system state
+                if g_telemetry["stale_count"] == 0:
+                    g_telemetry["system_state"] = "NORMAL [OPTIMAL]"
+        except Exception:
+            pass
+
+# ------------------------------------------------------------------------------
+# 2. QNX TCP Polling Client Thread (Port 8080)
 # ------------------------------------------------------------------------------
 def qnx_tcp_poller():
     global g_telemetry
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(1.0)
+            s.settimeout(0.8)
             s.connect((QNX_PI_IP, QNX_TCP_PORT))
             s.sendall(b"GET /api/telemetry HTTP/1.1\r\nHost: qnx\r\n\r\n")
             
@@ -63,10 +95,10 @@ def qnx_tcp_poller():
             g_telemetry.update(payload)
         except Exception:
             pass
-        time.sleep(0.05)  # 20 Hz poll rate
+        time.sleep(0.05)
 
 # ------------------------------------------------------------------------------
-# Web Server Request Handler
+# 3. Web Server Request Handler
 # ------------------------------------------------------------------------------
 class HostDashboardHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -78,13 +110,11 @@ class HostDashboardHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(g_telemetry).encode('utf-8'))
 
         elif self.path.startswith('/api/fault'):
-            # Fault injection forwarder to QNX Pi
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             
-            # Action handling
             action = self.path.split("action=")[-1] if "action=" in self.path else "none"
             if action == "disconnect":
                 g_telemetry["streams"]["traffic"]["stale"] = True
@@ -109,10 +139,14 @@ def main():
     print("  QNX REAL-TIME CITY DIGITAL TWIN HOST PC DASHBOARD SERVER")
     print("==========================================================================")
     print(f" Target QNX Pi Address : TCP {QNX_PI_IP}:{QNX_TCP_PORT}")
-    print(f" Web Server Active     : http://localhost:{HTTP_PORT}/city_digital_twin_dashboard.html")
+    print(f" UDP Listener Active   : UDP 0.0.0.0:{UDP_PORT}")
+    print(f" Web Dashboard Active  : http://localhost:{HTTP_PORT}/city_digital_twin_dashboard.html")
     print("==========================================================================")
 
-    # Start QNX Poller thread
+    # Start UDP receiver thread
+    threading.Thread(target=udp_receiver, daemon=True).start()
+
+    # Start QNX TCP Poller thread
     threading.Thread(target=qnx_tcp_poller, daemon=True).start()
 
     socketserver.TCPServer.allow_reuse_address = True
