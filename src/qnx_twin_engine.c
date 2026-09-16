@@ -12,7 +12,7 @@
    - Atomic Shared Memory State Buffers with POSIX Mutexes
    - POSIX Message Queues (mqueue) for Asynchronous Fault Notifications
    - High-Precision Monotonic Deadline Measurement (clock_gettime)
-   - TCP JSON Real-Time Snapshot Publisher for Host PC Dashboard
+   - UDP Telemetry Broadcaster (Port 9999) + TCP JSON Server (Port 8080)
    ========================================================================== */
 
 #include <stdio.h>
@@ -36,7 +36,7 @@
 #define TARGET_SYNC_PERIOD_MS 10.0
 #define BOUNDED_DEADLINE_MS 15.0
 #define STALE_TIMEOUT_MS 500.0
-#define WATCHDOG_CHECK_MS 50.0
+#define WATCHDOG_CHECK_MS 100.0
 #define TCP_PORT 8080
 #define UDP_PORT 9999
 
@@ -96,7 +96,7 @@ static double g_max_latency_ms = 0.0;
 static uint64_t g_total_ticks = 0;
 static uint64_t g_deadline_misses = 0;
 static uint32_t g_stale_count = 0;
-static bool g_synchronizer_alive = true;
+static uint64_t g_sync_heartbeat = 0;
 static pthread_mutex_t g_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 static mqd_t g_fault_mq;
 
@@ -175,10 +175,21 @@ static void* sensor_producer_thread(void *arg) {
 static void* twin_synchronizer_thread(void *arg) {
     struct timespec start_t, end_t, now_t;
 
+    // UDP broadcast socket for streaming packets directly to Host PC
+    int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+    int broadcast_enable = 1;
+    setsockopt(udp_sock, SOL_SOCKET, SO_BROADCAST, &broadcast_enable, sizeof(broadcast_enable));
+
+    struct sockaddr_in baddr;
+    memset(&baddr, 0, sizeof(baddr));
+    baddr.sin_family = AF_INET;
+    baddr.sin_port = htons(UDP_PORT);
+    baddr.sin_addr.s_addr = inet_addr("255.255.255.255");
+
     while (g_running) {
         clock_gettime(CLOCK_MONOTONIC, &start_t);
         clock_gettime(CLOCK_MONOTONIC, &now_t);
-        g_synchronizer_alive = true;
+        g_sync_heartbeat++;
 
         uint32_t local_stale_count = 0;
 
@@ -193,6 +204,13 @@ static void* twin_synchronizer_thread(void *arg) {
                     local_stale_count++;
                 } else {
                     g_streams[i].is_stale = false;
+                }
+
+                // Broadcast UDP telemetry packet to Host PC on Port 9999
+                if (udp_sock >= 0) {
+                    char pkt_buf[256];
+                    snprintf(pkt_buf, sizeof(pkt_buf), "{\"stream\":\"%s\",\"value\":%.1f}", g_streams[i].id, g_streams[i].last_value);
+                    sendto(udp_sock, pkt_buf, strlen(pkt_buf), 0, (struct sockaddr*)&baddr, sizeof(baddr));
                 }
             } else {
                 g_streams[i].is_stale = true;
@@ -212,6 +230,7 @@ static void* twin_synchronizer_thread(void *arg) {
         /* 10ms Sync Period Sleep */
         usleep(10000);
     }
+    if (udp_sock >= 0) close(udp_sock);
     return NULL;
 }
 
@@ -246,12 +265,13 @@ static void* fault_monitor_thread(void *arg) {
    Task 4: Safety Watchdog Monitor Thread (Priority 200)
    -------------------------------------------------------------------------- */
 static void* watchdog_thread(void *arg) {
+    uint64_t last_hb = 0;
     while (g_running) {
         usleep(WATCHDOG_CHECK_MS * 1000);
-        if (!g_synchronizer_alive) {
+        if (g_sync_heartbeat == last_hb && g_total_ticks > 10) {
             fprintf(stderr, "[WATCHDOG ALARM] Synchronizer thread non-responsive!\n");
         }
-        g_synchronizer_alive = false; // Reset heart-beat
+        last_hb = g_sync_heartbeat;
     }
     return NULL;
 }
