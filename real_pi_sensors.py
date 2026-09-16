@@ -20,28 +20,21 @@ PIN_IR     = 17  # Board Pin 11
 PIN_MQ135  = 27  # Board Pin 13
 PIN_ACS712 = 22  # Board Pin 15
 
-# ------------------------------------------------------------------------------
-# QNX Physical Memory Mapper (NOFD / Anonymous Physical Mapping)
-# ------------------------------------------------------------------------------
 class QNXGPIOMem:
     def __init__(self):
         self.mem = None
         self.valid = False
-
-        # Physical Base Address for BCM2711 (Pi 4)
         base_addr = 0xfe200000
 
-        # Method 1: QNX Native Anonymous Physical Memory Mapping (fd = -1)
         try:
             self.mem = mmap.mmap(-1, 4096, mmap.MAP_SHARED, mmap.PROT_READ, offset=base_addr)
             self.valid = True
             print(f"[QNX SUCCESS] Physical GPIO memory mapped at 0x{base_addr:X} (NOFD)!")
             return
-        except Exception as e:
+        except Exception:
             pass
 
-        # Method 2: Try /dev/gpiomem or /dev/mem
-        for dev in ["/dev/gpiomem", "/dev/mem", "/dev/zero"]:
+        for dev in ["/dev/gpiomem", "/dev/mem"]:
             if os.path.exists(dev):
                 try:
                     fd = os.open(dev, os.O_RDONLY | os.O_SYNC)
@@ -53,20 +46,16 @@ class QNXGPIOMem:
                 except Exception:
                     pass
 
-        print("[QNX NOTICE] Direct physical mmap not supported by user shell. Using QNX GPIO Driver mode.")
-
     def read_pin(self, pin):
         if not self.valid or self.mem is None:
             return None
         try:
-            # GPLEV0 register is at offset 0x34
             self.mem.seek(0x34)
             gplev0 = struct.unpack("I", self.mem.read(4))[0]
             return (gplev0 >> pin) & 1
         except Exception:
             return None
 
-# Try RPi.GPIO or setup direct memory mapper
 HAS_RPI_GPIO = False
 try:
     import RPi.GPIO as GPIO
@@ -88,14 +77,6 @@ def read_pin(pin):
         except Exception: pass
     if qnx_mem and qnx_mem.valid:
         return qnx_mem.read_pin(pin)
-    
-    # Check QNX GPIO device nodes (/dev/gpio*)
-    for dev_node in [f"/dev/gpio{pin}", f"/dev/gpio/pin{pin}", f"/sys/class/gpio/gpio{pin}/value"]:
-        if os.path.exists(dev_node):
-            try:
-                with open(dev_node, "r") as f:
-                    return int(f.read().strip())
-            except Exception: pass
     return None
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -108,19 +89,25 @@ print("  Listening for physical hardware pin changes...\n")
 
 vehicle_counter = 0
 last_ir_val = 1
+last_trigger_time = 0
 
 try:
     while True:
+        now = time.time()
         ir_val = read_pin(PIN_IR)
         mq_val = read_pin(PIN_MQ135)
         acs_val = read_pin(PIN_ACS712)
 
+        # IR Sensor Trigger Logic with Debounce
         if ir_val is not None:
-            if ir_val == 0 and last_ir_val == 1:
-                vehicle_counter += 1
-                print(f"\n[EVENT] IR Sensor Triggered! Vehicles: {vehicle_counter}")
+            # Trigger on LOW (0) with at least 0.3s between vehicle counts
+            if ir_val == 0:
+                if (now - last_trigger_time) > 0.35:
+                    vehicle_counter += 1
+                    last_trigger_time = now
+                    print(f"\n[EVENT] Vehicle Detected! Total Count: {vehicle_counter}")
             last_ir_val = ir_val
-            traffic_speed = round(min(120.0, 30.0 + vehicle_counter * 8.0), 1)
+            traffic_speed = round(min(120.0, 30.0 + vehicle_counter * 6.0), 1)
         else:
             traffic_speed = 45.0
 
