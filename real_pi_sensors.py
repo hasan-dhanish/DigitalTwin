@@ -31,15 +31,17 @@ def setup_gpio(pin):
         print(f"  [GPIO Pin {pin}] Configured successfully via sysfs.")
         return True
     except Exception as e:
-        print(f"  [GPIO Pin {pin} WARNING] Could not setup pin: {e}")
+        print(f"  [GPIO Pin {pin} WARNING] {e}")
         return False
 
 def read_gpio(pin):
+    val_path = f"/sys/class/gpio/gpio{pin}/value"
     try:
-        val_path = f"/sys/class/gpio/gpio{pin}/value"
         if os.path.exists(val_path):
             with open(val_path, "r") as f:
                 return int(f.read().strip())
+    except PermissionError:
+        return "PERMISSION_DENIED"
     except Exception:
         pass
     return None
@@ -56,7 +58,7 @@ try:
     HAS_RPI_GPIO = True
     print("[HARDWARE] RPi.GPIO driver active.")
 except Exception:
-    print("[HARDWARE] Setting up native sysfs GPIO pins (requires sudo)...")
+    print("[HARDWARE] Setting up native sysfs GPIO pins...")
     setup_gpio(PIN_IR)
     setup_gpio(PIN_MQ135)
     setup_gpio(PIN_ACS712)
@@ -68,12 +70,19 @@ print(" Listening for live physical hardware state changes...\n")
 
 vehicle_counter = 0
 last_ir_val = 1
+perm_warned = False
 
 try:
     while True:
         # Read IR Pin (GPIO 17)
         ir_val = GPIO.input(PIN_IR) if HAS_RPI_GPIO else read_gpio(PIN_IR)
-        if ir_val is not None:
+        
+        if ir_val == "PERMISSION_DENIED" and not perm_warned:
+            print("\n[ERROR] Permission Denied reading GPIO pins!")
+            print(">>> RUN WITH SUDO: sudo python3 real_pi_sensors.py 192.168.29.132 <<<\n")
+            perm_warned = True
+
+        if isinstance(ir_val, int):
             if ir_val == 0 and last_ir_val == 1:
                 vehicle_counter += 1
                 print(f"\n[EVENT] IR Sensor Triggered! Total Vehicles: {vehicle_counter}")
@@ -84,14 +93,14 @@ try:
 
         # Read MQ135 Pin (GPIO 27)
         mq_val = GPIO.input(PIN_MQ135) if HAS_RPI_GPIO else read_gpio(PIN_MQ135)
-        if mq_val is not None:
+        if isinstance(mq_val, int):
             air_aqi = round(85.0 if mq_val == 0 else 25.0, 1)
         else:
             air_aqi = 28.0
 
         # Read ACS712 Pin (GPIO 22)
         acs_val = GPIO.input(PIN_ACS712) if HAS_RPI_GPIO else read_gpio(PIN_ACS712)
-        if acs_val is not None:
+        if isinstance(acs_val, int):
             power_mw = round(490.0 if acs_val == 0 else 380.0, 1)
         else:
             power_mw = 410.0
