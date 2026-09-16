@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QNX MPU6050 Live 3D Sensor Digital Twin (Zero Latency Stream)</title>
+  <title>QNX MPU6050 Live 3D Sensor Digital Twin (MQTT & SSE Stream)</title>
 
-  <!-- Google Fonts & Three.js -->
+  <!-- Google Fonts, Three.js & MQTT.js -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
   <style>
     :root {
@@ -98,7 +99,7 @@
     .orientation-overlay {
       position: absolute; right: 24px; bottom: 24px; z-index: 10;
       background: var(--panel-bg); backdrop-filter: blur(16px);
-      border: 1px solid var(--panel-border); border-radius: 16px; padding: 16px; width: 220px;
+      border: 1px solid var(--panel-border); border-radius: 16px; padding: 16px; width: 240px;
     }
   </style>
 </head>
@@ -110,13 +111,13 @@
     <div class="brand">
       <div class="brand-icon">MPU</div>
       <div>
-        <div class="brand-title">QNX 3D Sensor Digital Twin (Zero Latency)</div>
-        <div class="brand-sub">Real-Time IMU Stream (UDP / SSE Push)</div>
+        <div class="brand-title">QNX 3D Sensor Digital Twin</div>
+        <div class="brand-sub">Real-Time IMU Stream (MQTT / SSE Stream)</div>
       </div>
     </div>
     <div class="status-badge" id="status-pill">
       <div class="status-dot" id="status-dot"></div>
-      <span id="status-text">CONNECTING TO STREAM...</span>
+      <span id="status-text">CONNECTING TO MQTT BROKER...</span>
     </div>
   </div>
 
@@ -124,7 +125,7 @@
     <div class="card">
       <div class="card-title">
         <span>3D Orientation Angles</span>
-        <span style="font-size:10px; color:var(--accent-cyan);">INSTANT 1:1 POSES</span>
+        <span style="font-size:10px; color:var(--accent-cyan);">1:1 INSTANT POSE</span>
       </div>
       <div class="angle-grid">
         <div class="angle-box"><div class="angle-label">PITCH (X)</div><div class="angle-val pitch-val" id="val-pitch">0.0°</div></div>
@@ -148,10 +149,11 @@
     </div>
 
     <div class="card">
-      <div class="card-title"><span>Stream Stats</span></div>
-      <div class="vec-row"><span class="vec-tag">Latency</span><span class="vec-num" id="freshness-val">0.0 ms</span></div>
+      <div class="card-title"><span>MQTT Stream Stats</span></div>
+      <div class="vec-row"><span class="vec-tag">MQTT Broker</span><span class="vec-num" style="color:var(--accent-cyan);">broker.emqx.io</span></div>
+      <div class="vec-row"><span class="vec-tag">MQTT Topic</span><span class="vec-num">digitaltwin/mpu6050</span></div>
       <div class="vec-row"><span class="vec-tag">Packets Received</span><span class="vec-num" id="pkt-count">0</span></div>
-      <div class="vec-row"><span class="vec-tag">Protocol Stream</span><span class="vec-num" style="color:var(--accent-cyan);" id="mode-val">SSE / UDP</span></div>
+      <div class="vec-row"><span class="vec-tag">Sensor Mode</span><span class="vec-num" style="color:var(--accent-green);" id="mode-val">INIT</span></div>
     </div>
   </div>
 
@@ -236,6 +238,7 @@
       scene.add(sensorBoard);
 
       window.addEventListener('resize', onWindowResize);
+      initMQTT();
       connectEventStream();
       animate();
     }
@@ -243,7 +246,7 @@
     function animate() {
       requestAnimationFrame(animate);
 
-      // INSTANT DIRECT 1:1 ROTATION (No slow lerp delays!)
+      // INSTANT DIRECT 1:1 ROTATION (No lag delays!)
       sensorBoard.rotation.x = THREE.MathUtils.degToRad(targetPitch - zeroPitch);
       sensorBoard.rotation.z = THREE.MathUtils.degToRad(targetRoll  - zeroRoll);
       sensorBoard.rotation.y = THREE.MathUtils.degToRad(targetYaw   - zeroYaw);
@@ -281,22 +284,63 @@
     }
 
     // -------------------------------------------------------------------------
-    // Server-Sent Events (SSE Push) for ZERO-LATENCY Instant Streaming
+    // Direct MQTT WebSockets Connection to broker.emqx.io:8084/mqtt
+    // -------------------------------------------------------------------------
+    function initMQTT() {
+      try {
+        console.log("Connecting directly to MQTT Broker over WebSockets...");
+        const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+          clientId: 'HostPC_3DVisualizer_' + Math.random().toString(16).substr(2, 8)
+        });
+
+        client.on('connect', function () {
+          console.log('[MQTT] Connected to broker.emqx.io!');
+          client.subscribe('digitaltwin/mpu6050', function (err) {
+            if (!err) {
+              console.log('[MQTT] Subscribed to topic: digitaltwin/mpu6050');
+              setConnectedStatus('MQTT LIVE STREAM (EMQX)');
+            }
+          });
+        });
+
+        client.on('message', function (topic, message) {
+          try {
+            const data = JSON.parse(message.toString());
+            data.online = true;
+            updateUI(data);
+          } catch(e){}
+        });
+
+        client.on('error', function (err) {
+          console.warn('[MQTT Error]', err);
+        });
+
+      } catch(err) {
+        console.warn('MQTT client init failed:', err);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Fallback SSE Local Server Connection
     // -------------------------------------------------------------------------
     function connectEventStream() {
       const evtSource = new EventSource('/api/mpu/stream');
-
       evtSource.onmessage = function(e) {
         try {
           const data = JSON.parse(e.data);
           updateUI(data);
         } catch(err){}
       };
+    }
 
-      evtSource.onerror = function() {
-        // Fallback polling if SSE drops
-        fetchFallback();
-      };
+    function setConnectedStatus(msg) {
+      const pill = document.getElementById('status-pill');
+      const statusText = document.getElementById('status-text');
+      const dot = document.getElementById('status-dot');
+      statusText.innerText = msg;
+      pill.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+      pill.style.color = '#10b981';
+      dot.style.backgroundColor = '#10b981';
     }
 
     function updateUI(data) {
@@ -319,38 +363,11 @@
         document.getElementById('gyro-z').innerText = `${data.gyro.z.toFixed(1)} °/s`;
       }
 
-      document.getElementById('freshness-val').innerText = `${data.freshness_ms || 0} ms`;
       document.getElementById('pkt-count').innerText = data.packet_id || 0;
-      document.getElementById('mode-val').innerText = data.mode || 'ONLINE';
-
-      const pill = document.getElementById('status-pill');
-      const statusText = document.getElementById('status-text');
-      const dot = document.getElementById('status-dot');
-
-      if (data.online) {
-        statusText.innerText = 'QNX MPU6050 LIVE (INSTANT)';
-        pill.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-        pill.style.color = '#10b981';
-        dot.style.backgroundColor = '#10b981';
-      } else {
-        statusText.innerText = 'WAITING FOR SENSOR STREAM...';
-        pill.style.borderColor = 'rgba(245, 158, 11, 0.4)';
-        pill.style.color = '#f59e0b';
-        dot.style.backgroundColor = '#f59e0b';
-      }
+      document.getElementById('mode-val').innerText = data.protocol || data.mode || 'MQTT LIVE';
+      setConnectedStatus(`MPU LIVE (${data.protocol || 'MQTT'})`);
     }
 
-    async function fetchFallback() {
-      try {
-        const res = await fetch('/api/mpu');
-        if (res.ok) {
-          const data = await res.json();
-          updateUI(data);
-        }
-      } catch(e){}
-    }
-
-    setInterval(fetchFallback, 40);
     window.onload = init3D;
   </script>
 </body>
