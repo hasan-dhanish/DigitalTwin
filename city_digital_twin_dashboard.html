@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>City Digital Twin Real-Time Synchronization Engine [QNX RTOS]</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #070913;
+      --card-bg: rgba(15, 23, 42, 0.85);
+      --card-border: rgba(56, 189, 248, 0.2);
+      --accent-cyan: #00f2fe;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-yellow: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Outfit', sans-serif; background-color: var(--bg-dark); color: var(--text-main); min-height: 100vh; padding: 24px; }
+
+    /* Header */
+    .header {
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 16px; padding: 18px 28px; margin-bottom: 24px;
+      backdrop-filter: blur(16px); box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .brand { display: flex; align-items: center; gap: 16px; }
+    .brand-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 20px; color: #000;
+    }
+    .brand-title { font-size: 20px; font-weight: 700; background: linear-gradient(to right, #fff, #93c5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .brand-sub { font-size: 13px; color: var(--text-muted); }
+
+    .status-badge {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 20px; border-radius: 30px; font-family: 'JetBrains Mono', monospace;
+      font-size: 14px; font-weight: 700; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: var(--accent-green);
+    }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent-green); box-shadow: 0 0 12px var(--accent-green); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { transform: scale(0.9); } 50% { transform: scale(1.2); } 100% { transform: scale(0.9); } }
+
+    /* Main Layout Grid */
+    .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+    .subsystems-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+
+    .card {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 16px; padding: 20px; backdrop-filter: blur(16px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px; }
+    .card-title { font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+    .card-tag { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; }
+
+    .tag-online { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+    .tag-stale { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+
+    /* Metric Item Rows */
+    .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+    .metric-row:last-child { border-bottom: none; }
+    .metric-label { color: var(--text-muted); }
+    .metric-val { font-weight: 700; color: var(--text-main); }
+
+    /* RTOS Engine Panel */
+    .engine-panel { display: flex; flex-direction: column; gap: 20px; }
+    .rtos-metric { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; text-align: center; }
+    .rtos-num { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 800; color: var(--accent-cyan); margin-top: 4px; }
+
+    /* 2D City Visualization Map */
+    .city-map-card { margin-top: 24px; grid-column: span 2; }
+    .city-canvas { width: 100%; height: 260px; background: #0c1022; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); }
+
+    /* Fault Injection Buttons */
+    .fault-controls { display: flex; gap: 12px; margin-top: 16px; }
+    .btn {
+      flex: 1; padding: 12px; border-radius: 12px; font-family: 'Outfit', sans-serif;
+      font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+      transition: all 0.2s ease; background: rgba(255,255,255,0.05); color: var(--text-main);
+    }
+    .btn-danger:hover { background: var(--accent-red); border-color: var(--accent-red); box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+    .btn-warning:hover { background: var(--accent-yellow); border-color: var(--accent-yellow); color: #000; }
+    .btn-success:hover { background: var(--accent-green); border-color: var(--accent-green); }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">QNX</div>
+      <div>
+        <div class="brand-title">City Digital Twin Real-Time Synchronization Engine</div>
+        <div class="brand-sub">Target Platform: Raspberry Pi 4 (QNX Neutrino RTOS v7.1)</div>
+      </div>
+    </div>
+    <div class="status-badge" id="sys-status-badge">
+      <div class="status-dot" id="sys-status-dot"></div>
+      <span id="sys-status-text">SYSTEM NORMAL [OPTIMAL]</span>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+
+    <!-- Left Column: 4 Subsystem Cards -->
+    <div class="subsystems-grid">
+
+      <!-- Subsystem 1: Traffic -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🚦 Traffic Subsystem</span>
+          <span class="card-tag tag-online" id="tag-traffic">ONLINE</span>
+        </div>
+        <div class="metric-row"><span class="metric-label">Speed / Flow</span><span class="metric-val" id="val-traffic-speed">45.0 km/h</span></div>
+        <div class="metric-row"><span class="metric-label">Vehicle Count</span><span class="metric-val" id="val-traffic-vehicles">124 vehicles</span></div>
+        <div class="metric-row"><span class="metric-label">Congestion Level</span><span class="metric-val" id="val-traffic-congestion">LOW (24%)</span></div>
+        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-traffic">12.4 ms</span></div>
+      </div>
+
+      <!-- Subsystem 2: Smart Power Grid -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">⚡ Smart Power Grid</span>
+          <span class="card-tag tag-online" id="tag-power">ONLINE</span>
+        </div>
+        <div class="metric-row"><span class="metric-label">Grid Load</span><span class="metric-val" id="val-power-load">410.0 MW</span></div>
+        <div class="metric-row"><span class="metric-label">Generation Output</span><span class="metric-val">485.0 MW</span></div>
+        <div class="metric-row"><span class="metric-label">Grid Stability</span><span class="metric-val" style="color:var(--accent-green);">OPTIMAL (99.8%)</span></div>
+        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-power">18.1 ms</span></div>
+      </div>
+
+      <!-- Subsystem 3: Water Network -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">💧 Water Pressure Net</span>
+          <span class="card-tag tag-online" id="tag-water">ONLINE</span>
+        </div>
+        <div class="metric-row"><span class="metric-label">Main Line Pressure</span><span class="metric-val" id="val-water-psi">65.0 PSI</span></div>
+        <div class="metric-row"><span class="metric-label">Tank Reservoir</span><span class="metric-val">84.2 %</span></div>
+        <div class="metric-row"><span class="metric-label">Water Quality index</span><span class="metric-val">EXCELLENT (98%)</span></div>
+        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-water">22.5 ms</span></div>
+      </div>
+
+      <!-- Subsystem 4: Environmental AQI -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🌱 Environmental AQI</span>
+          <span class="card-tag tag-online" id="tag-air">ONLINE</span>
+        </div>
+        <div class="metric-row"><span class="metric-label">Air Quality Index</span><span class="metric-val" id="val-air-aqi">28 AQI (GOOD)</span></div>
+        <div class="metric-row"><span class="metric-label">Ambient Temp</span><span class="metric-val">24.5 °C</span></div>
+        <div class="metric-row"><span class="metric-label">Relative Humidity</span><span class="metric-val">58 %</span></div>
+        <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-air">45.0 ms</span></div>
+      </div>
+
+    </div>
+
+    <!-- Right Column: QNX Real-Time Engine Panel -->
+    <div class="card engine-panel">
+      <div class="card-header">
+        <span class="card-title">⚙️ QNX RTOS Sync Engine</span>
+        <span class="card-tag tag-online">HARD RTOS</span>
+      </div>
+
+      <div class="rtos-metric">
+        <div class="metric-label">SYNC LATENCY</div>
+        <div class="rtos-num" id="rtos-latency">0.08 ms</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Target Budget: &lt; 15.0 ms</div>
+      </div>
+
+      <div class="rtos-metric">
+        <div class="metric-label">DEADLINE MISSES</div>
+        <div class="rtos-num" style="color:var(--accent-green);" id="rtos-misses">0</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Max Peak: <span id="rtos-peak">1.2 ms</span></div>
+      </div>
+
+      <div class="rtos-metric">
+        <div class="metric-label">SAFETY WATCHDOG</div>
+        <div class="rtos-num" style="color:var(--accent-green);" id="rtos-wd">HEALTHY</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Check Rate: 50 ms</div>
+      </div>
+
+      <div class="rtos-metric">
+        <div class="metric-label">STALE SENSOR COUNT</div>
+        <div class="rtos-num" style="color:var(--accent-green);" id="rtos-stale">0</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Timeout: 500 ms</div>
+      </div>
+
+      <!-- Fault Injection Controls -->
+      <div style="margin-top:10px;">
+        <div class="card-title" style="margin-bottom:8px;">Fault Injection Demo</div>
+        <div class="fault-controls">
+          <button class="btn btn-danger" onclick="injectFault('disconnect')">⚠️ Disconnect Traffic</button>
+          <button class="btn btn-warning" onclick="injectFault('delay')">⏱️ Inject Delay</button>
+          <button class="btn btn-success" onclick="injectFault('reset')">🔄 Reset Engine</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 2D Interactive City Subsystem Map -->
+    <div class="card city-map-card">
+      <div class="card-header">
+        <span class="card-title">🗺️ Real-Time 2D City Assets & Sensor Map</span>
+        <span class="card-tag tag-online">LIVE SNAPSHOT</span>
+      </div>
+      <canvas id="city-canvas" class="city-canvas"></canvas>
+    </div>
+
+  </div>
+
+  <script>
+    // 2D City Canvas Rendering
+    const canvas = document.getElementById('city-canvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+    }
+    resizeCanvas();
+    window.onresize = resizeCanvas;
+
+    let animAngle = 0;
+
+    function drawCityMap(data) {
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Draw Grid Background
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < w; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      }
+      for (let y = 0; y < h; y += 40) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      }
+
+      // 1. Draw Traffic Road Grid
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(50, h/2 - 20, w - 100, 40); // Horizontal main road
+      ctx.fillRect(w/2 - 20, 30, 40, h - 60);  // Vertical main road
+
+      // Road Lane Markings
+      ctx.strokeStyle = '#f59e0b';
+      ctx.setLineDash([10, 10]);
+      ctx.beginPath(); ctx.moveTo(50, h/2); ctx.lineTo(w - 100, h/2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(w/2, 30); ctx.lineTo(w/2, h - 60); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Moving Traffic Vehicle Nodes
+      animAngle += 0.05;
+      const trafficStale = data.streams?.traffic?.stale;
+      const vehColor = trafficStale ? '#ef4444' : '#00f2fe';
+
+      const vX = (w/2 - 150) + ((Math.sin(animAngle) + 1) * 150);
+      ctx.fillStyle = vehColor;
+      ctx.shadowColor = vehColor; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(vX, h/2 - 8, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // 2. Subsystem Asset Nodes
+      // Power Grid Subsystem
+      drawAssetNode(120, 80, '⚡ Power Station', data.streams?.power?.val + ' MW', data.streams?.power?.stale ? '#ef4444' : '#10b981');
+
+      // Water Network Subsystem
+      drawAssetNode(w - 140, 80, '💧 Water Facility', data.streams?.water?.val + ' PSI', data.streams?.water?.stale ? '#ef4444' : '#3b82f6');
+
+      // Environmental AQI Node
+      drawAssetNode(120, h - 70, '🌱 AQI Node #4', data.streams?.air?.val + ' AQI', data.streams?.air?.stale ? '#ef4444' : '#f59e0b');
+
+      // Traffic Control Hub
+      drawAssetNode(w - 140, h - 70, '🚦 Traffic Hub', data.streams?.traffic?.val + ' km/h', trafficStale ? '#ef4444' : '#00f2fe');
+    }
+
+    function drawAssetNode(x, y, title, valStr, color) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(x - 60, y - 25, 120, 50, 10); ctx.fill(); ctx.stroke();
+
+      ctx.fillStyle = '#f8fafc'; ctx.font = '12px Outfit'; ctx.textAlign = 'center';
+      ctx.fillText(title, x, y - 5);
+      ctx.fillStyle = color; ctx.font = '700 13px JetBrains Mono';
+      ctx.fillText(valStr, x, y + 14);
+    }
+
+    // Polling Telemetry from Host TCP Engine Server
+    async function updateDashboard() {
+      try {
+        const res = await fetch('/api/telemetry');
+        if (res.ok) {
+          const data = await res.json();
+          renderTelemetry(data);
+          drawCityMap(data);
+        }
+      } catch (e) {
+        console.warn('Telemetry fetch error:', e);
+      }
+    }
+
+    function renderTelemetry(data) {
+      // RTOS Metrics
+      document.getElementById('rtos-latency').innerText = `${data.sync_latency_ms.toFixed(2)} ms`;
+      document.getElementById('rtos-peak').innerText = `${data.max_latency_ms.toFixed(1)} ms`;
+      document.getElementById('rtos-misses').innerText = data.deadline_misses;
+      document.getElementById('rtos-stale').innerText = data.stale_count;
+
+      const badge = document.getElementById('sys-status-badge');
+      const badgeText = document.getElementById('sys-status-text');
+      const badgeDot = document.getElementById('sys-status-dot');
+
+      if (data.stale_count > 0) {
+        badgeText.innerText = `SYSTEM DEGRADED (${data.stale_count} STALE SENSOR)`;
+        badge.style.borderColor = 'rgba(239, 68, 68, 0.4)'; badge.style.color = '#ef4444'; badgeDot.style.background = '#ef4444';
+      } else {
+        badgeText.innerText = 'SYSTEM NORMAL [OPTIMAL]';
+        badge.style.borderColor = 'rgba(16, 185, 129, 0.4)'; badge.style.color = '#10b981'; badgeDot.style.background = '#10b981';
+      }
+
+      // Streams
+      if (data.streams) {
+        updateStreamCard('traffic', data.streams.traffic, 'val-traffic-speed');
+        updateStreamCard('power', data.streams.power, 'val-power-load');
+        updateStreamCard('water', data.streams.water, 'val-water-psi');
+        updateStreamCard('air', data.streams.air, 'val-air-aqi');
+      }
+    }
+
+    function updateStreamCard(sid, sData, valElId) {
+      if (!sData) return;
+      document.getElementById(valElId).innerText = `${sData.val.toFixed(1)} ${sData.unit}`;
+      document.getElementById(`fresh-${sid}`).innerText = `${sData.freshness_ms.toFixed(1)} ms`;
+
+      const tag = document.getElementById(`tag-${sid}`);
+      if (sData.stale) {
+        tag.innerText = 'STALE FAULT'; tag.className = 'card-tag tag-stale';
+      } else {
+        tag.innerText = 'ONLINE'; tag.className = 'card-tag tag-online';
+      }
+    }
+
+    function injectFault(action) {
+      console.log('Injecting fault:', action);
+      fetch(`/api/fault?action=${action}`).catch(()=>{});
+    }
+
+    setInterval(updateDashboard, 50); // 20 Hz update rate
+  </script>
+</body>
+</html>

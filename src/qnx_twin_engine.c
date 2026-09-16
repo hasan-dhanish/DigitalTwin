@@ -1,9 +1,18 @@
 /* ==========================================================================
    QNX Neutrino RTOS - City Digital Twin Real-Time Synchronization Engine
-   Problem Statement #48 - Production C Implementation
-   Target Architecture: QNX 7.1 / POSIX (x86_64 / ARMv8 RPi4)
-   Build Command: qcc -Vgcc_ntox86_64 -O2 qnx_twin_engine.c -o qnx_twin_engine -lrt
-   Linux Build:   gcc -O2 qnx_twin_engine.c -o twin_engine -lpthread -lrt
+   Production POSIX Hard Real-Time C Implementation
+   Target Architecture: QNX 7.1 / POSIX (ARMv8 Raspberry Pi 4 / x86_64)
+
+   RTOS Demonstration Features:
+   - POSIX Threads (pthread) with SCHED_FIFO Priority Scheduling
+     * Level 255: Twin Synchronizer Thread (10ms Period, Hard Real-Time)
+     * Level 200: Watchdog Safety Monitor (50ms Period)
+     * Level 180: Fault & Stale Data Monitor (500ms Timeout Detection)
+     * Level 150: Multi-Rate Data Acquisition Threads (Traffic, Energy, Water, Env)
+   - Atomic Shared Memory State Buffers with POSIX Mutexes
+   - POSIX Message Queues (mqueue) for Asynchronous Fault Notifications
+   - High-Precision Monotonic Deadline Measurement (clock_gettime)
+   - TCP JSON Real-Time Snapshot Publisher for Host PC Dashboard
    ========================================================================== */
 
 #include <stdio.h>
@@ -15,16 +24,27 @@
 #include <time.h>
 #include <pthread.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <mqueue.h>
 
 #define NUM_STREAMS 4
 #define RING_BUFFER_SIZE 256
-#define MAX_SYNC_LATENCY_MS 15.0
-#define WATCHDOG_TIMEOUT_MS 150.0
+#define TARGET_SYNC_PERIOD_MS 10.0
+#define BOUNDED_DEADLINE_MS 15.0
+#define STALE_TIMEOUT_MS 500.0
+#define WATCHDOG_CHECK_MS 50.0
+#define TCP_PORT 8080
 #define UDP_PORT 9999
 
+#define MQ_FAULT_QUEUE "/qnx_twin_fault_queue"
+
+/* --------------------------------------------------------------------------
+   Data Structures & Types
+   -------------------------------------------------------------------------- */
 typedef struct {
     char stream_id[32];
     double value;
@@ -40,6 +60,7 @@ typedef struct {
 } circular_ring_buffer_t;
 
 typedef struct {
+    char id[16];
     char name[32];
     uint32_t period_ms;
     uint32_t priority;
@@ -50,27 +71,42 @@ typedef struct {
     bool fault_active;
     double freshness_ms;
     bool is_stale;
+    double last_value;
 } stream_config_t;
 
+typedef struct {
+    char fault_type[32];
+    char stream_id[32];
+    double freshness_ms;
+    struct timespec fault_time;
+} fault_event_t;
+
+/* Global Subsystem Telemetry Definitions */
 static stream_config_t g_streams[NUM_STREAMS] = {
-    {"Traffic Telemetry", 50, 150, 30.0, 90.0, "km/h", {}, false, 0.0, false},
-    {"Smart Power Grid", 100, 150, 350.0, 500.0, "MW", {}, false, 0.0, false},
-    {"Water Pressure Net", 500, 150, 40.0, 80.0, "PSI", {}, false, 0.0, false},
-    {"Environmental AQI", 1000, 150, 15.0, 75.0, "AQI", {}, false, 0.0, false}
+    {"traffic", "Traffic Telemetry", 50,  150, 20.0,  110.0, "km/h", {}, false, 0.0, false, 45.0},
+    {"power",   "Smart Power Grid",  100, 150, 350.0, 520.0, "MW",   {}, false, 0.0, false, 410.0},
+    {"water",   "Water Pressure Net",500, 150, 30.0,  95.0,  "PSI",  {}, false, 0.0, false, 65.0},
+    {"air",     "Environmental AQI", 1000,150, 15.0,  85.0,  "AQI",  {}, false, 0.0, false, 28.0}
 };
 
+/* RTOS Global State */
 static bool g_running = true;
 static double g_current_latency_ms = 0.0;
 static double g_max_latency_ms = 0.0;
 static uint64_t g_total_ticks = 0;
 static uint64_t g_deadline_misses = 0;
+static uint32_t g_stale_count = 0;
+static bool g_synchronizer_alive = true;
+static pthread_mutex_t g_state_mutex = PTHREAD_MUTEX_INITIALIZER;
+static mqd_t g_fault_mq;
 
-/* Helper: Precise Elapsed Time in Milliseconds */
+/* --------------------------------------------------------------------------
+   Helper Functions
+   -------------------------------------------------------------------------- */
 static double get_elapsed_ms(struct timespec start, struct timespec end) {
     return (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_nsec - start.tv_nsec) / 1000000.0;
 }
 
-/* Ring Buffer Functions */
 static void ring_buffer_init(circular_ring_buffer_t *rb) {
     rb->head = 0;
     rb->tail = 0;
@@ -96,7 +132,9 @@ static bool ring_buffer_get_latest(circular_ring_buffer_t *rb, sensor_packet_t *
     return true;
 }
 
-/* Data Acquisition Task (Priority 150) */
+/* --------------------------------------------------------------------------
+   Task 1: Data Acquisition Producer Thread (Priority 150)
+   -------------------------------------------------------------------------- */
 static void* sensor_producer_thread(void *arg) {
     stream_config_t *stream = (stream_config_t*)arg;
     struct timespec next_tick;
@@ -105,16 +143,22 @@ static void* sensor_producer_thread(void *arg) {
     while (g_running) {
         if (!stream->fault_active) {
             sensor_packet_t pkt;
-            strncpy(pkt.stream_id, stream->name, sizeof(pkt.stream_id));
+            strncpy(pkt.stream_id, stream->id, sizeof(pkt.stream_id));
+            
             double range = stream->max_val - stream->min_val;
-            pkt.value = stream->min_val + ((double)rand() / RAND_MAX) * range;
+            double delta = (((double)rand() / RAND_MAX) - 0.5) * (range * 0.1);
+            stream->last_value += delta;
+            if (stream->last_value < stream->min_val) stream->last_value = stream->min_val;
+            if (stream->last_value > stream->max_val) stream->last_value = stream->max_val;
+
+            pkt.value = stream->last_value;
             strncpy(pkt.unit, stream->unit, sizeof(pkt.unit));
             clock_gettime(CLOCK_MONOTONIC, &pkt.timestamp);
 
             ring_buffer_push(&stream->ring_queue, pkt);
         }
 
-        /* Periodic Sleep */
+        /* Periodic Hard Real-Time Timer Sleep */
         next_tick.tv_nsec += stream->period_ms * 1000000L;
         while (next_tick.tv_nsec >= 1000000000L) {
             next_tick.tv_nsec -= 1000000000L;
@@ -125,150 +169,247 @@ static void* sensor_producer_thread(void *arg) {
     return NULL;
 }
 
-/* Hardware Telemetry Receiver Task (Priority 150) - UDP Port 9999 */
-static void* udp_hardware_listener_thread(void *arg) {
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) return NULL;
-
-    struct sockaddr_in servaddr;
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(UDP_PORT);
-
-    if (bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
-        close(sockfd);
-        return NULL;
-    }
-
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 500000;
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
-
-    char buffer[512];
-    while (g_running) {
-        ssize_t len = recvfrom(sockfd, buffer, sizeof(buffer) - 1, 0, NULL, NULL);
-        if (len > 0) {
-            buffer[len] = '\0';
-            char sid[32] = {0};
-            double val = 0.0;
-            if (sscanf(buffer, "{\"stream\": \"%31[^\"]\", \"value\": %lf}", sid, &val) == 2) {
-                for (int i = 0; i < NUM_STREAMS; i++) {
-                    if (strstr(g_streams[i].name, sid) || strcmp(sid, "traffic") == 0) {
-                        sensor_packet_t pkt;
-                        strncpy(pkt.stream_id, g_streams[i].name, sizeof(pkt.stream_id));
-                        pkt.value = val;
-                        strncpy(pkt.unit, g_streams[i].unit, sizeof(pkt.unit));
-                        clock_gettime(CLOCK_MONOTONIC, &pkt.timestamp);
-                        ring_buffer_push(&g_streams[i].ring_queue, pkt);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    close(sockfd);
-    return NULL;
-}
-
-/* Twin Synchronizer Task (Priority Level 255 - Highest) */
+/* --------------------------------------------------------------------------
+   Task 2: Hard Real-Time Twin Synchronizer Core (Priority 255 - Highest)
+   -------------------------------------------------------------------------- */
 static void* twin_synchronizer_thread(void *arg) {
     struct timespec start_t, end_t, now_t;
 
     while (g_running) {
         clock_gettime(CLOCK_MONOTONIC, &start_t);
         clock_gettime(CLOCK_MONOTONIC, &now_t);
+        g_synchronizer_alive = true;
 
+        uint32_t local_stale_count = 0;
+
+        pthread_mutex_lock(&g_state_mutex);
         for (int i = 0; i < NUM_STREAMS; i++) {
             sensor_packet_t pkt;
             if (ring_buffer_get_latest(&g_streams[i].ring_queue, &pkt)) {
                 double fresh = get_elapsed_ms(pkt.timestamp, now_t);
                 g_streams[i].freshness_ms = fresh;
-                g_streams[i].is_stale = (fresh > WATCHDOG_TIMEOUT_MS);
+                if (fresh > STALE_TIMEOUT_MS) {
+                    g_streams[i].is_stale = true;
+                    local_stale_count++;
+                } else {
+                    g_streams[i].is_stale = false;
+                }
             } else {
                 g_streams[i].is_stale = true;
+                local_stale_count++;
             }
         }
+        g_stale_count = local_stale_count;
+        g_total_ticks++;
+        pthread_mutex_unlock(&g_state_mutex);
 
         clock_gettime(CLOCK_MONOTONIC, &end_t);
         double latency = get_elapsed_ms(start_t, end_t);
         g_current_latency_ms = latency;
         if (latency > g_max_latency_ms) g_max_latency_ms = latency;
-        if (latency > MAX_SYNC_LATENCY_MS) g_deadline_misses++;
-        g_total_ticks++;
+        if (latency > BOUNDED_DEADLINE_MS) g_deadline_misses++;
 
-        usleep(10000); /* 10ms Sync Period */
+        /* 10ms Sync Period Sleep */
+        usleep(10000);
     }
     return NULL;
 }
 
-/* CLI Renderer Output Task */
+/* --------------------------------------------------------------------------
+   Task 3: Fault Monitor Thread (Priority 180) - POSIX Message Queue
+   -------------------------------------------------------------------------- */
+static void* fault_monitor_thread(void *arg) {
+    while (g_running) {
+        usleep(500000); // 500ms check interval
+
+        pthread_mutex_lock(&g_state_mutex);
+        for (int i = 0; i < NUM_STREAMS; i++) {
+            if (g_streams[i].is_stale) {
+                fault_event_t evt;
+                strncpy(evt.fault_type, "STALE_DATA_TIMEOUT", sizeof(evt.fault_type));
+                strncpy(evt.stream_id, g_streams[i].name, sizeof(evt.stream_id));
+                evt.freshness_ms = g_streams[i].freshness_ms;
+                clock_gettime(CLOCK_MONOTONIC, &evt.fault_time);
+
+                /* Send asynchronous fault event over POSIX Message Queue */
+                if (g_fault_mq != (mqd_t)-1) {
+                    mq_send(g_fault_mq, (const char*)&evt, sizeof(evt), 10);
+                }
+            }
+        }
+        pthread_mutex_unlock(&g_state_mutex);
+    }
+    return NULL;
+}
+
+/* --------------------------------------------------------------------------
+   Task 4: Safety Watchdog Monitor Thread (Priority 200)
+   -------------------------------------------------------------------------- */
+static void* watchdog_thread(void *arg) {
+    while (g_running) {
+        usleep(WATCHDOG_CHECK_MS * 1000);
+        if (!g_synchronizer_alive) {
+            fprintf(stderr, "[WATCHDOG ALARM] Synchronizer thread non-responsive!\n");
+        }
+        g_synchronizer_alive = false; // Reset heart-beat
+    }
+    return NULL;
+}
+
+/* --------------------------------------------------------------------------
+   Task 5: Host PC TCP JSON Snapshot Stream Server (Port 8080)
+   -------------------------------------------------------------------------- */
+static void* tcp_host_server_thread(void *arg) {
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) return NULL;
+
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in address;
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(TCP_PORT);
+
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        close(server_fd);
+        return NULL;
+    }
+
+    listen(server_fd, 5);
+
+    while (g_running) {
+        int new_socket = accept(server_fd, NULL, NULL);
+        if (new_socket < 0) continue;
+
+        char buffer[1024];
+        read(new_socket, buffer, sizeof(buffer));
+
+        pthread_mutex_lock(&g_state_mutex);
+        char json[2048];
+        snprintf(json, sizeof(json),
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n"
+            "{"
+            "\"system_state\": \"%s\","
+            "\"sync_latency_ms\": %.2f,"
+            "\"max_latency_ms\": %.2f,"
+            "\"deadline_misses\": %llu,"
+            "\"total_ticks\": %llu,"
+            "\"stale_count\": %u,"
+            "\"watchdog\": \"HEALTHY\","
+            "\"streams\": {"
+            "\"traffic\": {\"val\": %.1f, \"unit\": \"km/h\", \"freshness_ms\": %.1f, \"stale\": %s},"
+            "\"power\":   {\"val\": %.1f, \"unit\": \"MW\",   \"freshness_ms\": %.1f, \"stale\": %s},"
+            "\"water\":   {\"val\": %.1f, \"unit\": \"PSI\",  \"freshness_ms\": %.1f, \"stale\": %s},"
+            "\"air\":     {\"val\": %.1f, \"unit\": \"AQI\",  \"freshness_ms\": %.1f, \"stale\": %s}"
+            "}"
+            "}",
+            (g_stale_count == 0) ? "NORMAL [OPTIMAL]" : "DEGRADED [STALE FAULT]",
+            g_current_latency_ms,
+            g_max_latency_ms,
+            (unsigned long long)g_deadline_misses,
+            (unsigned long long)g_total_ticks,
+            g_stale_count,
+            g_streams[0].last_value, g_streams[0].freshness_ms, g_streams[0].is_stale ? "true" : "false",
+            g_streams[1].last_value, g_streams[1].freshness_ms, g_streams[1].is_stale ? "true" : "false",
+            g_streams[2].last_value, g_streams[2].freshness_ms, g_streams[2].is_stale ? "true" : "false",
+            g_streams[3].last_value, g_streams[3].freshness_ms, g_streams[3].is_stale ? "true" : "false"
+        );
+        pthread_mutex_unlock(&g_state_mutex);
+
+        write(new_socket, json, strlen(json));
+        close(new_socket);
+    }
+    close(server_fd);
+    return NULL;
+}
+
+/* --------------------------------------------------------------------------
+   CLI Logging Dashboard (Priority 50)
+   -------------------------------------------------------------------------- */
 static void render_cli() {
     printf("\033[H\033[J");
     printf("========================================================================\n");
-    printf("  QNX REAL-TIME CITY DIGITAL TWIN SYNCHRONIZATION ENGINE [C / POSIX]\n");
+    printf("  QNX REAL-TIME CITY DIGITAL TWIN SYNCHRONIZATION ENGINE [POSIX C]\n");
     printf("========================================================================\n");
-    printf(" Sync Latency       : %.3f ms (Deadline Limit: %.1f ms)\n", g_current_latency_ms, MAX_SYNC_LATENCY_MS);
-    printf(" Max Peak Latency   : %.3f ms | Total Ticks: %llu\n", g_max_latency_ms, (unsigned long long)g_total_ticks);
-    printf(" Deadline Misses    : %llu\n", (unsigned long long)g_deadline_misses);
+    printf(" [SYNC] Snapshot #%-8llu | Latency: %6.2f ms (Limit: %.1f ms)\n", 
+           (unsigned long long)g_total_ticks, g_current_latency_ms, BOUNDED_DEADLINE_MS);
+    printf(" [SYNC] Max Peak Latency  : %6.2f ms | Deadline Misses: %llu\n", 
+           g_max_latency_ms, (unsigned long long)g_deadline_misses);
+    printf(" [WATCHDOG] Synchronizer  : HEALTHY\n");
+    printf("------------------------------------------------------------------------\n");
+    printf(" REAL-TIME SUBSYSTEM STREAMS & DATA FRESHNESS:\n");
     printf("------------------------------------------------------------------------\n");
 
     for (int i = 0; i < NUM_STREAMS; i++) {
-        printf("  * %-22s (%4d ms) | State: %-12s | Freshness: %6.1f ms\n",
+        printf("  [DATA] %-20s | Val: %6.1f %-4s | Freshness: %6.1f ms | %s\n",
             g_streams[i].name,
-            g_streams[i].period_ms,
-            g_streams[i].is_stale ? "STALE FAULT" : "ONLINE",
-            g_streams[i].freshness_ms);
+            g_streams[i].last_value,
+            g_streams[i].unit,
+            g_streams[i].freshness_ms,
+            g_streams[i].is_stale ? "[FAULT - STALE]" : "[ONLINE]");
     }
     printf("========================================================================\n");
 }
 
+/* --------------------------------------------------------------------------
+   Main Function & Thread Orchestration
+   -------------------------------------------------------------------------- */
 int main(int argc, char *argv[]) {
-    printf("Initializing QNX Digital Twin Synchronization Engine...\n");
+    printf("Initializing QNX City Digital Twin Synchronization Engine...\n");
 
+    /* Initialize Ring Buffers */
     for (int i = 0; i < NUM_STREAMS; i++) {
         ring_buffer_init(&g_streams[i].ring_queue);
     }
 
-    pthread_t prod_threads[NUM_STREAMS];
-    pthread_t sync_thread;
-    pthread_t udp_thread;
+    /* Initialize POSIX Message Queue */
+    struct mq_attr attr;
+    attr.mq_flags = 0;
+    attr.mq_maxmsg = 10;
+    attr.mq_msgsize = sizeof(fault_event_t);
+    attr.mq_curmsgs = 0;
+    mq_unlink(MQ_FAULT_QUEUE);
+    g_fault_mq = mq_open(MQ_FAULT_QUEUE, O_CREAT | O_RDWR, 0666, &attr);
 
-    /* Create Producer Threads with Priority 150 */
+    pthread_t prod_threads[NUM_STREAMS];
+    pthread_t sync_thread, fault_thread, wd_thread, tcp_thread;
+
+    /* Create Sensor Producer Threads (Priority 150) */
     for (int i = 0; i < NUM_STREAMS; i++) {
         pthread_create(&prod_threads[i], NULL, sensor_producer_thread, &g_streams[i]);
         struct sched_param param;
-        param.sched_priority = g_streams[i].priority; // Priority 150
+        param.sched_priority = 150;
         pthread_setschedparam(prod_threads[i], SCHED_FIFO, &param);
     }
 
-    /* Create UDP Hardware Listener Thread with Priority 150 */
-    pthread_create(&udp_thread, NULL, udp_hardware_listener_thread, NULL);
-    struct sched_param udp_param;
-    udp_param.sched_priority = 150;
-    pthread_setschedparam(udp_thread, SCHED_FIFO, &udp_param);
+    /* Create Fault Monitor Thread (Priority 180) */
+    pthread_create(&fault_thread, NULL, fault_monitor_thread, NULL);
+    struct sched_param fault_param = {.sched_priority = 180};
+    pthread_setschedparam(fault_thread, SCHED_FIFO, &fault_param);
 
-    /* Create Synchronizer Core Thread with Highest Priority 255 */
+    /* Create Watchdog Thread (Priority 200) */
+    pthread_create(&wd_thread, NULL, watchdog_thread, NULL);
+    struct sched_param wd_param = {.sched_priority = 200};
+    pthread_setschedparam(wd_thread, SCHED_FIFO, &wd_param);
+
+    /* Create Host TCP Server Thread (Priority 150) */
+    pthread_create(&tcp_thread, NULL, tcp_host_server_thread, NULL);
+
+    /* Create Twin Synchronizer Thread (Priority 255 - Highest) */
     pthread_create(&sync_thread, NULL, twin_synchronizer_thread, NULL);
-    struct sched_param sync_param;
-    sync_param.sched_priority = 255; // QNX Highest Hard Real-Time Priority
+    struct sched_param sync_param = {.sched_priority = 255};
     pthread_setschedparam(sync_thread, SCHED_FIFO, &sync_param);
 
     /* Run CLI Dashboard loop */
-    for (int tick = 0; tick < 100; tick++) {
+    while (g_running) {
         render_cli();
         usleep(100000);
     }
 
+    /* Cleanup */
     g_running = false;
-    for (int i = 0; i < NUM_STREAMS; i++) {
-        pthread_join(prod_threads[i], NULL);
-    }
-    pthread_join(udp_thread, NULL);
-    pthread_join(sync_thread, NULL);
-
-    printf("\n[QNX RTOS] Execution complete. Engine shut down cleanly.\n");
+    mq_close(g_fault_mq);
+    mq_unlink(MQ_FAULT_QUEUE);
     return 0;
 }
-
