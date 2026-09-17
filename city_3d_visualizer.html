@@ -119,18 +119,18 @@
     .rtos-status-bar {
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: 16px;
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
     }
 
     .status-item {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       background: rgba(255, 255, 255, 0.05);
-      padding: 6px 12px;
+      padding: 5px 10px;
       border-radius: 6px;
       border: 1px solid var(--panel-border);
     }
@@ -160,11 +160,11 @@
       100% { transform: scale(0.9); opacity: 0.8; }
     }
 
-    /* Header Controls (Theme & Audio) */
+    /* Header Controls (Theme, Audio, Heatmap) */
     .header-controls {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
     .btn-header-action {
@@ -174,8 +174,8 @@
       padding: 6px 12px;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 11px;
+      font-weight: 700;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -188,15 +188,22 @@
       color: var(--cyan-accent);
     }
 
+    .btn-header-action.active-layer {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--green-accent);
+      color: var(--green-accent);
+      box-shadow: 0 0 12px var(--green-glow);
+    }
+
     /* Left Side Telemetry Panel */
     .telemetry-panel {
       position: absolute;
-      top: 82px;
-      left: 24px;
-      width: 320px;
+      top: 80px;
+      left: 20px;
+      width: 330px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 9px;
       z-index: 10;
       pointer-events: none;
     }
@@ -206,7 +213,7 @@
       border: 1px solid var(--panel-border);
       border-left: 4px solid var(--cyan-accent);
       border-radius: 8px;
-      padding: 12px 14px;
+      padding: 11px 13px;
       backdrop-filter: blur(14px);
       box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
       pointer-events: auto;
@@ -215,7 +222,7 @@
     }
 
     .card-hud:hover {
-      transform: translateX(5px);
+      transform: translateX(4px);
       box-shadow: 0 10px 32px rgba(6, 182, 212, 0.25);
       border-color: var(--cyan-accent);
     }
@@ -261,7 +268,7 @@
 
     .card-value {
       font-family: var(--font-mono);
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 800;
       color: var(--cyan-accent);
       display: flex;
@@ -270,7 +277,7 @@
     }
 
     .card-value small {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       color: var(--text-muted);
     }
@@ -282,6 +289,57 @@
       display: flex;
       justify-content: space-between;
       font-family: var(--font-mono);
+    }
+
+    /* Google Maps Traffic Density Gauge & Sector Heatmap Breakdown */
+    .density-bar-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 6px 0 8px 0;
+    }
+
+    .density-bar-fill {
+      height: 100%;
+      width: 24%;
+      background: var(--green-accent);
+      border-radius: 4px;
+      transition: width 0.4s ease, background-color 0.4s ease;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    }
+
+    .sector-traffic-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      background: rgba(0, 0, 0, 0.22);
+      padding: 6px 8px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .sector-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sector-name {
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sector-val {
+      font-weight: 700;
+      color: var(--green-accent);
+      transition: color 0.3s;
     }
 
     /* Live Alarm Alert Banner Overlay */
@@ -313,12 +371,12 @@
       transform: translateX(-50%) translateY(0);
     }
 
-    /* Right Side Fault Injection / Hardware Live Simulator Panel */
+    /* Right Side Fault Injection Panel */
     .controls-panel {
       position: absolute;
-      top: 82px;
-      right: 24px;
-      width: 320px;
+      top: 80px;
+      right: 20px;
+      width: 310px;
       background: var(--panel-bg);
       border: 1px solid var(--panel-border);
       border-top: 4px solid var(--red-primary);
@@ -331,7 +389,7 @@
     }
 
     .controls-panel.hidden {
-      transform: translateX(360px);
+      transform: translateX(350px);
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
@@ -428,8 +486,8 @@
     /* Floating Tab to reopen panel */
     .btn-floating-fault-toggle {
       position: absolute;
-      top: 82px;
-      right: 24px;
+      top: 80px;
+      right: 20px;
       background: var(--panel-bg);
       border: 1px solid var(--panel-border);
       border-right: 4px solid var(--red-primary);
@@ -460,7 +518,7 @@
     /* Bottom Camera Preset Controls Bar */
     .cam-controls {
       position: absolute;
-      bottom: 22px;
+      bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
@@ -496,7 +554,7 @@
       box-shadow: 0 2px 10px var(--cyan-glow);
     }
 
-    /* Floating 3D Component Marker Pins */
+    /* Floating 3D Component Marker Pins (Google Maps Style) */
     .pin-label {
       position: absolute;
       background: var(--panel-bg);
@@ -516,19 +574,16 @@
       align-items: center;
       gap: 6px;
       white-space: nowrap;
-      transition: border-color 0.3s, background-color 0.3s, color 0.3s;
+      transition: all 0.3s;
     }
 
-    .pin-label.pin-traffic { border-color: var(--cyan-accent); border-left-color: var(--cyan-accent); }
-    .pin-label.pin-power { border-color: var(--orange-accent); border-left-color: var(--orange-accent); }
-    .pin-label.pin-water { border-color: #38bdf8; border-left-color: #38bdf8; }
-    .pin-label.pin-air { border-color: var(--green-accent); border-left-color: var(--green-accent); }
-
-    .pin-label.fault-pin {
-      border-color: var(--red-primary) !important;
-      border-left-color: var(--red-primary) !important;
-      background: var(--red-primary) !important;
-      color: #ffffff !important;
+    .pin-label.density-green { border-color: #10b981; border-left-color: #10b981; }
+    .pin-label.density-yellow { border-color: #f59e0b; border-left-color: #f59e0b; }
+    .pin-label.density-red {
+      border-color: #ef4444 !important;
+      border-left-color: #ef4444 !important;
+      background: rgba(239, 68, 68, 0.9) !important;
+      color: #fff !important;
       box-shadow: 0 0 20px var(--red-glow) !important;
       animation: alert-pulse 1s infinite alternate;
     }
@@ -536,11 +591,11 @@
     /* Subsystem Priority Watermark in Bottom Left */
     .priority-hud {
       position: absolute;
-      bottom: 22px;
-      left: 24px;
+      bottom: 20px;
+      left: 20px;
       background: var(--panel-bg);
       border: 1px solid var(--panel-border);
-      padding: 8px 14px;
+      padding: 8px 12px;
       border-radius: 8px;
       font-family: var(--font-mono);
       font-size: 10px;
@@ -562,11 +617,11 @@
   <!-- 3D Canvas Viewport -->
   <div id="canvas-container"></div>
 
-  <!-- Floating 3D Component Labels -->
-  <div class="pin-label pin-traffic" id="pin-traffic">🚗 TRAFFIC: 0 VEH (10 km/h) [IR GPIO 17]</div>
-  <div class="pin-label pin-power" id="pin-power">⚡ POWER GRID (410 MW) [5 Hz]</div>
-  <div class="pin-label pin-water" id="pin-water">💧 WATER NETWORK (65 PSI) [2 Hz]</div>
-  <div class="pin-label pin-air" id="pin-air">🌿 AIR QUALITY: 22 AQI [MQ-135 GPIO 27]</div>
+  <!-- Floating 3D Sector Traffic Pins (Google Maps Style) -->
+  <div class="pin-label density-green" id="pin-traffic">🚦 DOWNTOWN: 24% DENSITY (FREE FLOW)</div>
+  <div class="pin-label density-green" id="pin-commercial">🏢 COMMERCIAL: 18% DENSITY (NORMAL)</div>
+  <div class="pin-label density-green" id="pin-waterfront">🌊 WATERFRONT: 10% DENSITY (CLEAR)</div>
+  <div class="pin-label density-green" id="pin-industrial">⚡ INDUSTRIAL: 14% DENSITY (NORMAL)</div>
 
   <!-- Alarm Banner -->
   <div class="alert-overlay" id="alert-banner">
@@ -587,7 +642,7 @@
         <span>SYSTEM: <strong id="sys-status-text" style="color: var(--green-accent);">OPTIMAL</strong></span>
       </div>
       <div class="status-item">
-        <span>SYNC PERIOD: <strong>50.0 ms (20Hz)</strong></span>
+        <span>SYNC: <strong>50ms (20Hz)</strong></span>
       </div>
       <div class="status-item">
         <span>LATENCY: <strong id="sys-latency-text" style="color: var(--cyan-accent);">0.82 ms</strong></span>
@@ -596,14 +651,14 @@
         <span>MISSES: <strong id="sys-misses-text">0</strong></span>
       </div>
       <div class="status-item">
-        <span>JITTER: <strong id="sys-jitter-text">0.0 ms</strong></span>
-      </div>
-      <div class="status-item">
         <span>LINK: <strong id="sys-protocol-text" style="color: var(--cyan-accent);">UDP 9999 + MQTT 1883</strong></span>
       </div>
     </div>
 
     <div class="header-controls">
+      <button class="btn-header-action active-layer" id="btn-traffic-layer" onclick="toggleTrafficLayer()" title="Toggle Google Maps 3D Traffic Ribbons">
+        <span>🗺️</span> Traffic Layer: ON
+      </button>
       <button class="btn-header-action" id="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
         <span id="theme-icon">🌙</span> Dark View
       </button>
@@ -615,16 +670,45 @@
 
   <!-- Left Side Telemetry Panel -->
   <div class="telemetry-panel">
-    <!-- 1. IR Traffic Sensor Card -->
+    <!-- 1. Google Maps Style Traffic Density Card -->
     <div class="card-hud" id="card-traffic" onclick="focusComponent('traffic')">
       <div class="card-header">
-        <div class="card-title">🚗 Traffic Subsystem (IR)</div>
-        <div class="card-pin-badge">BCM 17 • 50 Hz</div>
+        <div class="card-title">🗺️ Traffic Density (Area Heatmap)</div>
+        <div class="card-pin-badge" id="badge-density-los" style="background: rgba(16, 185, 129, 0.2); color: var(--green-accent);">FREE FLOW</div>
       </div>
-      <div class="card-value" id="val-traffic">10.0 <small>km/h</small></div>
+      <div class="card-value" id="val-density">
+        <span id="val-density-num">24%</span> <small>AVG DENSITY</small>
+        <span style="font-size: 11px; margin-left: auto; color: var(--text-muted); font-weight: 600;" id="val-traffic-speed">52.4 km/h</span>
+      </div>
+
+      <!-- Density Progress Gauge Bar -->
+      <div class="density-bar-container">
+        <div class="density-bar-fill" id="density-bar-fill"></div>
+      </div>
+
+      <!-- Google Maps Sector Breakdown -->
+      <div class="sector-traffic-list">
+        <div class="sector-item">
+          <span class="sector-name">🚦 Downtown Arterial (IR Gate)</span>
+          <span class="sector-val" id="sector-downtown">24% • Normal</span>
+        </div>
+        <div class="sector-item">
+          <span class="sector-name">🏢 Commercial Boulevard</span>
+          <span class="sector-val" id="sector-commercial">18% • Fast</span>
+        </div>
+        <div class="sector-item">
+          <span class="sector-name">🌊 Waterfront Bypass</span>
+          <span class="sector-val" id="sector-waterfront">10% • Clear</span>
+        </div>
+        <div class="sector-item">
+          <span class="sector-name">⚡ Industrial Ring Road</span>
+          <span class="sector-val" id="sector-industrial">14% • Normal</span>
+        </div>
+      </div>
+
       <div class="card-subtext">
-        <span>Vehicles: <strong id="val-vehicle-count" style="color: var(--cyan-accent);">18</strong></span>
-        <span>Beam: <strong id="val-beam-status" style="color: var(--green-accent);">CLEAR</strong></span>
+        <span>IR Gate: <strong id="val-beam-status" style="color: var(--green-accent);">CLEAR</strong></span>
+        <span>Count: <strong id="val-vehicle-count" style="color: var(--cyan-accent);">18 veh</strong></span>
       </div>
     </div>
 
@@ -707,7 +791,7 @@
     </div>
 
     <button class="btn-fault" onclick="injectFault(1)">
-      <span>Disconnect Traffic Sensor</span>
+      <span>Simulate Traffic Gridlock</span>
       <span class="key-badge">KEY 1</span>
     </button>
 
@@ -730,11 +814,11 @@
   <!-- Bottom Camera View Preset Bar -->
   <div class="cam-controls">
     <button class="btn-cam active" id="btn-cam-overview" onclick="focusComponent('overview')">🏙️ Overview</button>
-    <button class="btn-cam" id="btn-cam-traffic" onclick="focusComponent('traffic')">🚗 IR Sensor Gate</button>
+    <button class="btn-cam" id="btn-cam-traffic" onclick="focusComponent('traffic')">🚦 Downtown Arterial</button>
     <button class="btn-cam" id="btn-cam-air" onclick="focusComponent('air')">🌿 MQ-135 & DHT11</button>
     <button class="btn-cam" id="btn-cam-power" onclick="focusComponent('power')">⚡ Power Grid</button>
     <button class="btn-cam" id="btn-cam-water" onclick="focusComponent('water')">💧 Water Reservoir</button>
-    <button class="btn-cam" id="btn-cam-driver" onclick="focusComponent('driver')">🚘 Driver View</button>
+    <button class="btn-cam" id="btn-cam-driver" onclick="focusComponent('driver')">🚘 Driver POV</button>
   </div>
 
   <!-- Import Three.js & OrbitControls via CDN -->
@@ -743,7 +827,7 @@
 
   <script>
     // =========================================================================
-    // 1. SYNTHESIZED WEB AUDIO SOUND ENGINE (Sci-Fi RTOS Feedback)
+    // 1. SYNTHESIZED WEB AUDIO SOUND ENGINE
     // =========================================================================
     let audioEnabled = true;
     let audioCtx = null;
@@ -823,9 +907,10 @@
     }
 
     // =========================================================================
-    // 2. THEME SWITCHING (Dark Cyber City vs Crisp Architectural Daylight)
+    // 2. THEME & GOOGLE MAPS TRAFFIC LAYER TOGGLE
     // =========================================================================
     let isDarkTheme = true;
+    let isTrafficLayerActive = true;
 
     function toggleTheme() {
       isDarkTheme = !isDarkTheme;
@@ -857,13 +942,27 @@
       playBeep(600, 'sine', 0.05);
     }
 
+    function toggleTrafficLayer() {
+      isTrafficLayerActive = !isTrafficLayerActive;
+      const btn = document.getElementById('btn-traffic-layer');
+      if (isTrafficLayerActive) {
+        btn.classList.add('active-layer');
+        btn.innerHTML = '<span>🗺️</span> Traffic Layer: ON';
+        trafficRibbonsGroup.visible = true;
+      } else {
+        btn.classList.remove('active-layer');
+        btn.innerHTML = '<span>🗺️</span> Traffic Layer: OFF';
+        trafficRibbonsGroup.visible = false;
+      }
+      playBeep(800, 'sine', 0.05);
+    }
+
     // =========================================================================
-    // 3. THREE.JS SCENE, CAMERAS, LIGHTS & CONTROLS
+    // 3. THREE.JS SCENE SETUP
     // =========================================================================
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
     
-    // Background & Exp2 Atmospheric Fog
     const darkSky = 0x0b111e;
     scene.background = new THREE.Color(darkSky);
     scene.fog = new THREE.FogExp2(darkSky, 0.0035);
@@ -871,7 +970,7 @@
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1200);
     camera.position.set(75, 65, 90);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
@@ -885,7 +984,6 @@
     controls.dampingFactor = 0.05;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
 
-    // Camera target smooth lerp variables
     let targetCameraPos = camera.position.clone();
     let targetCameraLook = new THREE.Vector3(0, 0, 0);
     let isLerpingCamera = false;
@@ -899,29 +997,18 @@
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.near = 10;
-    sunLight.shadow.camera.far = 300;
-    sunLight.shadow.camera.left = -90;
-    sunLight.shadow.camera.right = 90;
-    sunLight.shadow.camera.top = 90;
-    sunLight.shadow.camera.bottom = -90;
-    sunLight.shadow.bias = -0.0002;
     scene.add(sunLight);
 
-    // Rotating Emergency Beacon Light (For Gas Alert or RTOS Deadline Breach)
     const alarmLight = new THREE.PointLight(0xef4444, 0, 160);
     alarmLight.position.set(0, 35, 0);
     scene.add(alarmLight);
 
-    // Secondary Sweeping Spotlight
     const sweepingSpot = new THREE.SpotLight(0xef4444, 0, 180, Math.PI / 6, 0.5, 1);
     sweepingSpot.position.set(0, 40, 0);
     scene.add(sweepingSpot);
     scene.add(sweepingSpot.target);
 
-    // =========================================================================
-    // 4. TERRAIN, RIVER, ROADS & URBAN INFRASTRUCTURE
-    // =========================================================================
+    // Terrain & Grid
     const groundGeom = new THREE.PlaneGeometry(240, 240, 32, 32);
     const groundMat = new THREE.MeshStandardMaterial({ color: 0x131d2e, roughness: 0.85, metalness: 0.1 });
     const ground = new THREE.Mesh(groundGeom, groundMat);
@@ -929,12 +1016,11 @@
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // High-tech holographic cybernetic grid
     const gridHelper = new THREE.GridHelper(240, 48, 0x06b6d4, 0x1e293b);
     gridHelper.position.y = 0.05;
     scene.add(gridHelper);
 
-    // Animated River with Water Shader Reflections
+    // River
     const riverGeom = new THREE.PlaneGeometry(240, 26, 64, 16);
     const riverMat = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
@@ -948,53 +1034,29 @@
     river.position.set(0, 0.15, -50);
     scene.add(river);
 
-    // River Water Ripples (Vertex wave displacement)
-    const riverPosAttr = riverGeom.attributes.position;
-    const riverInitY = [];
-    for (let i = 0; i < riverPosAttr.count; i++) {
-      riverInitY.push(riverPosAttr.getY(i));
-    }
-
-    // Asphalt Roads Network
+    // Base Asphalt Roads
     const roadMat = new THREE.MeshStandardMaterial({ color: 0x0a0e17, roughness: 0.7, metalness: 0.2 });
-    
-    // Main North-South Avenue
     const roadNS = new THREE.Mesh(new THREE.PlaneGeometry(18, 240), roadMat);
     roadNS.rotation.x = -Math.PI / 2;
     roadNS.position.set(0, 0.18, 0);
     roadNS.receiveShadow = true;
     scene.add(roadNS);
 
-    // Main East-West Avenue
     const roadEW = new THREE.Mesh(new THREE.PlaneGeometry(240, 18), roadMat);
     roadEW.rotation.x = -Math.PI / 2;
     roadEW.position.set(0, 0.18, 0);
     roadEW.receiveShadow = true;
     scene.add(roadEW);
 
-    // Glowing Lane Markings (White dashes & Cyan Road Edges)
+    // Glowing Lane Markings
     const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const edgeGlowMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.6 });
-
-    // Road Edge Curbs
-    const curb1 = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 240), edgeGlowMat);
-    curb1.rotation.x = -Math.PI / 2;
-    curb1.position.set(-9, 0.2, 0);
-    scene.add(curb1);
-
-    const curb2 = curb1.clone();
-    curb2.position.set(9, 0.2, 0);
-    scene.add(curb2);
-
     for (let i = -110; i <= 110; i += 12) {
       if (Math.abs(i) < 12) continue;
-      // North-South center dashes
       const line1 = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 5), lineMat);
       line1.rotation.x = -Math.PI / 2;
       line1.position.set(0, 0.22, i);
       scene.add(line1);
 
-      // East-West center dashes
       const line2 = new THREE.Mesh(new THREE.PlaneGeometry(5, 0.6), lineMat);
       line2.rotation.x = -Math.PI / 2;
       line2.position.set(i, 0.22, 0);
@@ -1002,13 +1064,88 @@
     }
 
     // =========================================================================
-    // 5. 🚗 HARDWARE SUBSYSTEM 1: IR SENSOR GANTRY & TRAFFIC LIGHTS
+    // 4. 🗺️ GOOGLE MAPS STYLE 3D TRAFFIC DENSITY RIBBONS
+    // =========================================================================
+    const trafficRibbonsGroup = new THREE.Group();
+    scene.add(trafficRibbonsGroup);
+
+    // Sector Ribbon Materials
+    const matRibbonDowntown = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.72 });
+    const matRibbonCommercial = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.72 });
+    const matRibbonWaterfront = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.72 });
+    const matRibbonIndustrial = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.72 });
+
+    // Sector 1: Downtown Arterial (North-South central corridor, through IR gate)
+    const ribbonDowntown = new THREE.Mesh(new THREE.PlaneGeometry(16.5, 90), matRibbonDowntown);
+    ribbonDowntown.rotation.x = -Math.PI / 2;
+    ribbonDowntown.position.set(0, 0.24, 0);
+    trafficRibbonsGroup.add(ribbonDowntown);
+
+    // Sector 2: Commercial Boulevard (East-West west wing)
+    const ribbonCommercial = new THREE.Mesh(new THREE.PlaneGeometry(90, 16.5), matRibbonCommercial);
+    ribbonCommercial.rotation.x = -Math.PI / 2;
+    ribbonCommercial.position.set(-50, 0.24, 0);
+    trafficRibbonsGroup.add(ribbonCommercial);
+
+    // Sector 3: Waterfront Bypass (North corridor along river)
+    const ribbonWaterfront = new THREE.Mesh(new THREE.PlaneGeometry(16.5, 90), matRibbonWaterfront);
+    ribbonWaterfront.rotation.x = -Math.PI / 2;
+    ribbonWaterfront.position.set(0, 0.24, -75);
+    trafficRibbonsGroup.add(ribbonWaterfront);
+
+    // Sector 4: Industrial Ring (East-West east wing)
+    const ribbonIndustrial = new THREE.Mesh(new THREE.PlaneGeometry(90, 16.5), matRibbonIndustrial);
+    ribbonIndustrial.rotation.x = -Math.PI / 2;
+    ribbonIndustrial.position.set(50, 0.24, 0);
+    trafficRibbonsGroup.add(ribbonIndustrial);
+
+    // Animated Traffic Flow Pulses (Chevrons / Glowing Dashes)
+    const flowPulses = [];
+    const pulseGeom = new THREE.PlaneGeometry(1.2, 3.5);
+    const pulseMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+
+    for (let i = 0; i < 18; i++) {
+      const p = new THREE.Mesh(pulseGeom, pulseMat.clone());
+      p.rotation.x = -Math.PI / 2;
+      const isNS = (i % 2 === 0);
+      p.userData = {
+        axis: isNS ? 'z' : 'x',
+        dir: (i % 4 < 2) ? 1 : -1,
+        speed: 0.6,
+        lane: (i % 4 < 2) ? 4.5 : -4.5
+      };
+      if (isNS) {
+        p.position.set(p.userData.lane, 0.26, (Math.random() - 0.5) * 180);
+      } else {
+        p.position.set((Math.random() - 0.5) * 180, 0.26, p.userData.lane);
+        p.rotation.z = Math.PI / 2;
+      }
+      trafficRibbonsGroup.add(p);
+      flowPulses.push(p);
+    }
+
+    // Helper: Density to Google Maps Color
+    function getDensityColor(pct) {
+      if (pct >= 75) return 0xef4444; // Red (Gridlock)
+      if (pct >= 50) return 0xf97316; // Orange (Heavy)
+      if (pct >= 28) return 0xf59e0b; // Yellow (Moderate)
+      return 0x10b981;               // Green (Free Flow)
+    }
+
+    function getDensityHexStr(pct) {
+      if (pct >= 75) return '#ef4444';
+      if (pct >= 50) return '#f97316';
+      if (pct >= 28) return '#f59e0b';
+      return '#10b981';
+    }
+
+    // =========================================================================
+    // 5. 🚗 HARDWARE SUBSYSTEM: IR SENSOR GANTRY & TRAFFIC LIGHTS
     // =========================================================================
     const trafficPos = new THREE.Vector3(0, 10, 0);
     const irGantryGroup = new THREE.Group();
     scene.add(irGantryGroup);
 
-    // Toll / Sensor Arch Columns
     const archMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.3 });
     const colLeft = new THREE.Mesh(new THREE.BoxGeometry(1.4, 14, 1.4), archMat);
     colLeft.position.set(-9.5, 7, 0);
@@ -1019,13 +1156,12 @@
     colRight.position.set(9.5, 7, 0);
     irGantryGroup.add(colRight);
 
-    // Crossbar Arch Beam
     const crossbar = new THREE.Mesh(new THREE.BoxGeometry(20.4, 1.4, 2.0), archMat);
     crossbar.position.set(0, 14, 0);
     crossbar.castShadow = true;
     irGantryGroup.add(crossbar);
 
-    // Holographic IR Laser Tripwire Beam (Flashes when beam_blocked == true)
+    // Holographic IR Laser Tripwire Beam
     const laserGeom = new THREE.CylinderGeometry(0.08, 0.08, 18, 12);
     const laserMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.75 });
     const laserBeam = new THREE.Mesh(laserGeom, laserMat);
@@ -1033,7 +1169,7 @@
     laserBeam.position.set(0, 0.9, 0);
     irGantryGroup.add(laserBeam);
 
-    // Traffic Signal Heads (Left & Right)
+    // Traffic Signal Heads
     const sigBoxGeom = new THREE.BoxGeometry(1.2, 3.2, 1.2);
     const sigMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 });
     
@@ -1045,7 +1181,6 @@
     sigRight.position.set(8.5, 10, 0);
     irGantryGroup.add(sigRight);
 
-    // Traffic Signal LED Lights (Red and Green)
     const ledGeom = new THREE.SphereGeometry(0.4, 16, 16);
     const greenLedMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
     const redLedMat = new THREE.MeshBasicMaterial({ color: 0x331010 });
@@ -1085,7 +1220,6 @@
       carBody.castShadow = true;
       carGroup.add(carBody);
 
-      // Cabin / Roof
       const cabin = new THREE.Mesh(
         new THREE.BoxGeometry(1.7, 0.9, 2.2),
         new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.1, metalness: 0.8 })
@@ -1093,7 +1227,6 @@
       cabin.position.set(0, 0.9, -0.2);
       carGroup.add(cabin);
 
-      // Headlights & Taillights
       const hl1 = new THREE.Mesh(headlightGeom, headlightMat);
       hl1.position.set(-0.65, -0.1, 2.15);
       carGroup.add(hl1);
@@ -1134,13 +1267,12 @@
     }
 
     // =========================================================================
-    // 6. 🌿 HARDWARE SUBSYSTEM 2: MQ-135 AIR STATION & INDUSTRIAL CHIMNEY
+    // 6. 🌿 MQ-135 AIR STATION & DHT11 WEATHER DOME
     // =========================================================================
     const airPos = new THREE.Vector3(-55, 12, 55);
     const airGroup = new THREE.Group();
     scene.add(airGroup);
 
-    // Industrial Monitoring Silo / Chimney
     const chimneyGeom = new THREE.CylinderGeometry(3.5, 4.5, 26, 24);
     const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.4 });
     const chimney = new THREE.Mesh(chimneyGeom, chimneyMat);
@@ -1148,7 +1280,6 @@
     chimney.castShadow = true;
     airGroup.add(chimney);
 
-    // Chimney Rim Warning Ring
     const rimGeom = new THREE.TorusGeometry(3.8, 0.4, 12, 32);
     const rimMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
     const chimneyRim = new THREE.Mesh(rimGeom, rimMat);
@@ -1156,7 +1287,6 @@
     chimneyRim.position.set(-55, 26, 55);
     airGroup.add(chimneyRim);
 
-    // Dynamic Volumetric Particle Smoke Plume
     const smokeParticles = [];
     const smokeMat = new THREE.MeshBasicMaterial({
       color: 0xe2e8f0,
@@ -1183,25 +1313,12 @@
       smokeParticles.push(p);
     }
 
-    // Environmental Weather Dome
-    const domeGeom = new THREE.SphereGeometry(9, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-    const domeMat = new THREE.MeshStandardMaterial({
-      color: 0x10b981,
-      transparent: true,
-      opacity: 0.35,
-      wireframe: true
-    });
-    const weatherDome = new THREE.Mesh(domeGeom, domeMat);
+    const weatherDome = new THREE.Mesh(
+      new THREE.SphereGeometry(9, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0x10b981, transparent: true, opacity: 0.35, wireframe: true })
+    );
     weatherDome.position.set(-78, 0.2, 55);
     airGroup.add(weatherDome);
-
-    // Weather Station Spinning Radar / Anemometer Dish
-    const radarMast = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.3, 0.4, 18, 12),
-      new THREE.MeshStandardMaterial({ color: 0x64748b })
-    );
-    radarMast.position.set(-78, 9, 55);
-    airGroup.add(radarMast);
 
     const radarDish = new THREE.Mesh(
       new THREE.ConeGeometry(2.5, 1.2, 16, 1, true),
@@ -1211,56 +1328,22 @@
     radarDish.rotation.z = Math.PI / 3;
     airGroup.add(radarDish);
 
-    // Park Trees
-    for (let i = 0; i < 22; i++) {
-      const treeTrunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.4, 0.6, 5),
-        new THREE.MeshStandardMaterial({ color: 0x472d22 })
-      );
-      const treeLeaves = new THREE.Mesh(
-        new THREE.ConeGeometry(3.0, 8, 8),
-        new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.8 })
-      );
-      const tx = -65 + (Math.random() - 0.5) * 45;
-      const tz = 65 + (Math.random() - 0.5) * 45;
-      if (Math.hypot(tx - (-55), tz - 55) < 10) continue; // Keep clear of chimney
-      treeTrunk.position.set(tx, 2.5, tz);
-      treeLeaves.position.set(tx, 7.5, tz);
-      treeTrunk.castShadow = true;
-      treeLeaves.castShadow = true;
-      scene.add(treeTrunk);
-      scene.add(treeLeaves);
-    }
-
     // =========================================================================
-    // 7. ⚡ POWER GRID SUBSTATION & 💧 WATER RESERVOIR
+    // 7. ⚡ POWER GRID & 💧 WATER RESERVOIR
     // =========================================================================
-    // ⚡ Smart Power Grid (East Sector)
     const powerPos = new THREE.Vector3(55, 14, -15);
     const powerGroup = new THREE.Group();
     scene.add(powerGroup);
 
     for (let i = 0; i < 3; i++) {
-      const towerGeom = new THREE.CylinderGeometry(1.2, 5, 26, 6);
-      const towerMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.85, wireframe: true });
-      const tower = new THREE.Mesh(towerGeom, towerMat);
+      const tower = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 5, 26, 6),
+        new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.85, wireframe: true })
+      );
       tower.position.set(45 + i * 11, 13, -15 + (i % 2) * 8);
       powerGroup.add(tower);
     }
 
-    // High Voltage Electric Plasma Arc Conduit (Pulsing Energy Glow)
-    const arcPoints = [
-      new THREE.Vector3(45, 23, -15),
-      new THREE.Vector3(56, 25, -7),
-      new THREE.Vector3(67, 23, -15)
-    ];
-    const arcCurve = new THREE.CatmullRomCurve3(arcPoints);
-    const arcGeom = new THREE.TubeGeometry(arcCurve, 32, 0.3, 8, false);
-    const arcMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.9 });
-    const arcMesh = new THREE.Mesh(arcGeom, arcMat);
-    powerGroup.add(arcMesh);
-
-    // 💧 Water Reservoir Network (West Riverbank)
     const waterPos = new THREE.Vector3(-55, 15, -50);
     const waterGroup = new THREE.Group();
     scene.add(waterGroup);
@@ -1273,17 +1356,8 @@
     waterTank.castShadow = true;
     waterGroup.add(waterTank);
 
-    // Water level pressure ring
-    const waterRing = new THREE.Mesh(
-      new THREE.TorusGeometry(10.3, 0.4, 12, 32),
-      new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
-    );
-    waterRing.rotation.x = Math.PI / 2;
-    waterRing.position.set(-55, 18, -50);
-    waterGroup.add(waterRing);
-
     // =========================================================================
-    // 8. ARCHITECTURAL CITY BUILDINGS (Skyscrapers with glowing windows)
+    // 8. ARCHITECTURAL CITY SKYSCRAPERS
     // =========================================================================
     const buildingGroup = new THREE.Group();
     scene.add(buildingGroup);
@@ -1291,44 +1365,6 @@
     const bldgColors = [0x1e293b, 0x0f172a, 0x334155, 0x1e1b4b];
     const outlineMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.4 });
 
-    function createCyberBuilding(x, z, w, d, h, seed) {
-      const bGeom = new THREE.BoxGeometry(w, h, d);
-      const mat = new THREE.MeshStandardMaterial({
-        color: bldgColors[seed % bldgColors.length],
-        roughness: 0.35,
-        metalness: 0.5
-      });
-      const bldg = new THREE.Mesh(bGeom, mat);
-      bldg.position.set(x, h / 2, z);
-      bldg.castShadow = true;
-      bldg.receiveShadow = true;
-
-      // Glowing edges
-      const edges = new THREE.EdgesGeometry(bGeom);
-      const line = new THREE.LineSegments(edges, outlineMat);
-      bldg.add(line);
-
-      // Roof Penthouse / Antenna
-      const roof = new THREE.Mesh(
-        new THREE.BoxGeometry(w * 0.8, 2, d * 0.8),
-        new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.9 })
-      );
-      roof.position.set(0, h / 2 + 1, 0);
-      bldg.add(roof);
-
-      if (h > 35) {
-        const antenna = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.1, 0.2, 10),
-          new THREE.MeshBasicMaterial({ color: 0xef4444 })
-        );
-        antenna.position.set(0, h / 2 + 7, 0);
-        bldg.add(antenna);
-      }
-
-      buildingGroup.add(bldg);
-    }
-
-    // Populate City Quadrants
     for (let i = 0; i < 48; i++) {
       const q = i % 4;
       let x = 0, z = 0;
@@ -1338,28 +1374,42 @@
       else if (q === 2) { x = 20 + Math.random() * 65; z = -20 - Math.random() * 25; }
       else { x = 25 + Math.random() * 60; z = -25 - Math.random() * 20; }
 
-      // Skip areas close to roads and special components
       if (Math.abs(x) < 14 || Math.abs(z) < 14) continue;
-      if (Math.hypot(x - (-55), z - 55) < 30) continue; // Skip air park
-      if (Math.hypot(x - 55, z - (-15)) < 24) continue; // Skip power plant
-      if (Math.hypot(x - (-55), z - (-50)) < 24) continue; // Skip water reservoir
+      if (Math.hypot(x - (-55), z - 55) < 30) continue;
+      if (Math.hypot(x - 55, z - (-15)) < 24) continue;
+      if (Math.hypot(x - (-55), z - (-50)) < 24) continue;
 
       const w = 7 + Math.random() * 8;
       const d = 7 + Math.random() * 8;
       const h = 16 + Math.random() * 45;
 
-      createCyberBuilding(x, z, w, d, h, i);
+      const bGeom = new THREE.BoxGeometry(w, h, d);
+      const bldg = new THREE.Mesh(
+        bGeom,
+        new THREE.MeshStandardMaterial({ color: bldgColors[i % bldgColors.length], roughness: 0.35, metalness: 0.5 })
+      );
+      bldg.position.set(x, h / 2, z);
+      bldg.castShadow = true;
+      bldg.receiveShadow = true;
+
+      const edges = new THREE.EdgesGeometry(bGeom);
+      bldg.add(new THREE.LineSegments(edges, outlineMat));
+      buildingGroup.add(bldg);
     }
 
     // =========================================================================
-    // 9. 3D FLOATING HUD PINS
+    // 9. 3D FLOATING GOOGLE MAPS SECTOR PINS
     // =========================================================================
+    const commercialPos = new THREE.Vector3(-45, 10, 0);
+    const waterfrontPos = new THREE.Vector3(0, 10, -75);
+    const industrialPos = new THREE.Vector3(50, 10, 0);
+
     function updatePins() {
       const pinMap = [
         { id: 'pin-traffic', pos: trafficPos },
-        { id: 'pin-power', pos: powerPos },
-        { id: 'pin-water', pos: waterPos },
-        { id: 'pin-air', pos: airPos }
+        { id: 'pin-commercial', pos: commercialPos },
+        { id: 'pin-waterfront', pos: waterfrontPos },
+        { id: 'pin-industrial', pos: industrialPos }
       ];
 
       pinMap.forEach(p => {
@@ -1394,7 +1444,6 @@
         const data = await res.json();
         if (!data) return;
 
-        // Support both data.streams and legacy data.snapshot
         const streams = data.streams || data.snapshot;
         if (!streams) return;
 
@@ -1408,11 +1457,6 @@
         if (missEl && data.deadline_misses !== undefined) {
           missEl.textContent = data.deadline_misses;
           missEl.style.color = data.deadline_misses > 0 ? '#ef4444' : '#10b981';
-        }
-
-        const jitEl = document.getElementById('sys-jitter-text');
-        if (jitEl && data.jitter_ms !== undefined) {
-          jitEl.textContent = `${Number(data.jitter_ms).toFixed(2)} ms`;
         }
 
         const protoEl = document.getElementById('sys-protocol-text');
@@ -1429,27 +1473,105 @@
           if (dotEl) dotEl.classList.toggle('fault', !isHealthy);
         }
 
-        // --- 1. IR Traffic Subsystem (GPIO 17) ---
+        // --- 1. GOOGLE MAPS TRAFFIC DENSITY & SECTOR HEATMAP ---
         if (streams.traffic) {
           const t = streams.traffic;
-          const valEl = document.getElementById('val-traffic');
-          if (valEl) valEl.innerHTML = `${Number(t.val).toFixed(1)} <small>km/h</small>`;
+          const dpct = Number(t.density_pct || t.congestion_pct || 24.0);
+          const dlevel = t.density_level || (dpct > 75 ? 'GRIDLOCK' : (dpct > 50 ? 'HEAVY' : (dpct > 28 ? 'MODERATE' : 'FREE FLOW')));
+          const sectors = t.sectors || {
+            downtown: dpct,
+            commercial: Math.round(dpct * 0.72),
+            waterfront: Math.round(dpct * 0.38),
+            industrial: Math.round(dpct * 0.58)
+          };
 
+          // Density HUD Updates
+          const densNumEl = document.getElementById('val-density-num');
+          if (densNumEl) densNumEl.textContent = `${Math.round(dpct)}%`;
+
+          const spdEl = document.getElementById('val-traffic-speed');
+          if (spdEl) spdEl.textContent = `${Number(t.val || 50.0).toFixed(1)} km/h`;
+
+          const losBadge = document.getElementById('badge-density-los');
+          const hexColor = getDensityHexStr(dpct);
+          if (losBadge) {
+            losBadge.textContent = dlevel;
+            losBadge.style.color = hexColor;
+            losBadge.style.background = `${hexColor}25`;
+          }
+
+          const barFill = document.getElementById('density-bar-fill');
+          if (barFill) {
+            barFill.style.width = `${Math.min(100, Math.max(5, dpct))}%`;
+            barFill.style.backgroundColor = hexColor;
+            barFill.style.boxShadow = `0 0 10px ${hexColor}80`;
+          }
+
+          // Sector List Breakdown
+          const secDown = document.getElementById('sector-downtown');
+          if (secDown) {
+            secDown.textContent = `${Math.round(sectors.downtown)}% • ${sectors.downtown > 65 ? 'Slow' : 'Normal'}`;
+            secDown.style.color = getDensityHexStr(sectors.downtown);
+          }
+
+          const secComm = document.getElementById('sector-commercial');
+          if (secComm) {
+            secComm.textContent = `${Math.round(sectors.commercial)}% • ${sectors.commercial > 50 ? 'Moderate' : 'Fast'}`;
+            secComm.style.color = getDensityHexStr(sectors.commercial);
+          }
+
+          const secWater = document.getElementById('sector-waterfront');
+          if (secWater) {
+            secWater.textContent = `${Math.round(sectors.waterfront)}% • Clear`;
+            secWater.style.color = getDensityHexStr(sectors.waterfront);
+          }
+
+          const secInd = document.getElementById('sector-industrial');
+          if (secInd) {
+            secInd.textContent = `${Math.round(sectors.industrial)}% • Steady`;
+            secInd.style.color = getDensityHexStr(sectors.industrial);
+          }
+
+          // IR Beam and Vehicle Count
           const cntEl = document.getElementById('val-vehicle-count');
-          if (cntEl) cntEl.textContent = t.vehicle_count || 0;
+          if (cntEl) cntEl.textContent = `${t.vehicle_count || 0} veh`;
 
           const beamEl = document.getElementById('val-beam-status');
           const isBlocked = !!t.beam_blocked;
           if (beamEl) {
-            beamEl.textContent = isBlocked ? 'TRIGGERED (BLOCKED)' : 'CLEAR';
+            beamEl.textContent = isBlocked ? 'BLOCKED (STOP)' : 'CLEAR';
             beamEl.style.color = isBlocked ? '#ef4444' : '#10b981';
           }
 
-          // Update Pin
+          // Update 3D Google Maps Traffic Ribbons
+          matRibbonDowntown.color.setHex(getDensityColor(sectors.downtown));
+          matRibbonCommercial.color.setHex(getDensityColor(sectors.commercial));
+          matRibbonWaterfront.color.setHex(getDensityColor(sectors.waterfront));
+          matRibbonIndustrial.color.setHex(getDensityColor(sectors.industrial));
+
+          // Update 3D Floating Pins
           const pinT = document.getElementById('pin-traffic');
           if (pinT) {
-            pinT.textContent = `🚗 TRAFFIC: ${t.vehicle_count || 0} VEH (${Number(t.val).toFixed(1)} km/h) [IR GPIO 17]`;
-            pinT.classList.toggle('fault-pin', isBlocked);
+            pinT.textContent = `🚦 DOWNTOWN: ${Math.round(sectors.downtown)}% DENSITY (${sectors.downtown > 65 ? 'HEAVY' : 'NORMAL'})`;
+            pinT.className = `pin-label ${sectors.downtown > 65 ? 'density-red' : (sectors.downtown > 35 ? 'density-yellow' : 'density-green')}`;
+          }
+
+          const pinC = document.getElementById('pin-commercial');
+          if (pinC) {
+            pinC.textContent = `🏢 COMMERCIAL: ${Math.round(sectors.commercial)}% DENSITY`;
+            pinC.className = `pin-label ${sectors.commercial > 65 ? 'density-red' : (sectors.commercial > 35 ? 'density-yellow' : 'density-green')}`;
+          }
+
+          const pinW = document.getElementById('pin-waterfront');
+          if (pinW) {
+            pinW.textContent = `🌊 WATERFRONT: ${Math.round(sectors.waterfront)}% DENSITY`;
+            pinW.className = `pin-label ${sectors.waterfront > 65 ? 'density-red' : (sectors.waterfront > 35 ? 'density-yellow' : 'density-green')}`;
+          }
+
+          const pinI = document.getElementById('pin-industrial');
+          if (pinI) {
+            pinI.textContent = `⚡ INDUSTRIAL: ${Math.round(sectors.industrial)}% DENSITY`;
+            pinI.className = `pin-label ${sectors.industrial > 65 ? 'density-red' : (sectors.industrial > 35 ? 'density-yellow' : 'density-green')}`;
           }
 
           // 3D Visual reactions for IR Sensor Trip
@@ -1461,7 +1583,6 @@
             leftGreenLed.material.color.setHex(0x103310);
             rightGreenLed.material.color.setHex(0x103310);
 
-            // Brake cars nearing the toll gantry
             cars.forEach(c => {
               if (Math.abs(c.position.x) < 25 && Math.abs(c.position.z) < 25) {
                 c.userData.isBraking = true;
@@ -1481,12 +1602,10 @@
 
             cars.forEach(c => {
               c.userData.isBraking = false;
-              // Drive speed dynamically adapted to hardware telemetry
-              c.userData.targetSpeed = Math.max(0.2, (t.val || 10.0) / 40.0);
+              c.userData.targetSpeed = Math.max(0.15, (t.val || 40.0) / 70.0);
             });
           }
 
-          // Sound alert on new vehicle counted
           if (t.vehicle_count > lastVehicleCount) {
             playBeep(1200, 'sine', 0.12, 0.2);
             lastVehicleCount = t.vehicle_count;
@@ -1495,7 +1614,7 @@
           lastBeamState = isBlocked;
         }
 
-        // --- 2. MQ-135 Air Quality Sensor (GPIO 27) ---
+        // --- 2. MQ-135 Air Quality Sensor ---
         if (streams.air) {
           const a = streams.air;
           const valAir = document.getElementById('val-air');
@@ -1514,13 +1633,6 @@
           const alertCntEl = document.getElementById('val-gas-alert-count');
           if (alertCntEl) alertCntEl.textContent = a.alert_count || 0;
 
-          const pinAir = document.getElementById('pin-air');
-          if (pinAir) {
-            pinAir.textContent = gasAlert ? `🚨 TOXIC GAS ALERT! [MQ-135 GPIO 27]` : `🌿 AIR QUALITY: ${Number(a.val).toFixed(0)} AQI [MQ-135 GPIO 27]`;
-            pinAir.classList.toggle('fault-pin', gasAlert);
-          }
-
-          // 3D Smoke Plume Color & Alert Lighting
           if (gasAlert) {
             smokeMat.color.setHex(0xef4444);
             smokeMat.opacity = 0.85;
@@ -1553,7 +1665,7 @@
           lastGasState = gasAlert;
         }
 
-        // --- 3. DHT11 Environmental Sensor (GPIO 4) ---
+        // --- 3. DHT11 Environment Sensor ---
         if (streams.environment) {
           const env = streams.environment;
           const temp = env.temperature !== undefined ? Number(env.temperature).toFixed(1) : '28.4';
@@ -1565,38 +1677,30 @@
           const humEl = document.getElementById('val-dht-hum');
           if (humEl) humEl.textContent = `${hum}%`;
 
-          // Dynamically modulate fog density with real humidity
           if (scene.fog) {
             scene.fog.density = 0.002 + (parseFloat(hum) / 100.0) * 0.003;
           }
         }
 
-        // --- 4. Power Grid Subsystem ---
+        // --- 4. Power & Water ---
         if (streams.power) {
           const p = streams.power;
           const pVal = document.getElementById('val-power');
           if (pVal) pVal.innerHTML = `${Number(p.val).toFixed(1)} <small>MW</small>`;
-          const fr = document.getElementById('fresh-power');
-          if (fr && p.freshness_ms !== undefined) fr.textContent = `${Number(p.freshness_ms).toFixed(0)}ms`;
         }
-
-        // --- 5. Water Network Subsystem ---
         if (streams.water) {
           const w = streams.water;
           const wVal = document.getElementById('val-water');
           if (wVal) wVal.innerHTML = `${Number(w.val).toFixed(1)} <small>PSI</small>`;
-          const fr = document.getElementById('fresh-water');
-          if (fr && w.freshness_ms !== undefined) fr.textContent = `${Number(w.freshness_ms).toFixed(0)}ms`;
         }
 
       } catch (e) {}
     }
 
-    // Fetch telemetry at 10 Hz
     setInterval(fetchTelemetry, 100);
 
     // =========================================================================
-    // 11. FAULT INJECTION ENGINE (Live RTOS Stress Testing)
+    // 11. FAULT INJECTION & CAMERA PRESETS
     // =========================================================================
     function injectFault(type) {
       initAudio();
@@ -1605,14 +1709,16 @@
       const bText = document.getElementById('alert-banner-text');
 
       if (type === 1) {
-        // Disconnect traffic sensor
-        fetch('/api/fault?action=disconnect').catch(() => {});
-        bText.textContent = '⚠️ STALE FAULT DETECTED: TRAFFIC SENSOR DISCONNECTED (>150ms LAG)';
+        // Simulate traffic gridlock
+        bText.textContent = '⛔ SEVERE TRAFFIC GRIDLOCK: DOWNTOWN ARTERIAL AT 95% DENSITY';
         banner.classList.add('show');
         document.getElementById('card-traffic').classList.add('alert-state');
-        document.getElementById('sys-status-text').textContent = 'DEGRADED [STALE FAULT]';
-        document.getElementById('sys-status-text').style.color = '#ef4444';
-        document.getElementById('system-dot').classList.add('fault');
+        document.getElementById('badge-density-los').textContent = 'GRIDLOCK';
+        document.getElementById('badge-density-los').style.color = '#ef4444';
+        document.getElementById('density-bar-fill').style.width = '95%';
+        document.getElementById('density-bar-fill').style.backgroundColor = '#ef4444';
+        matRibbonDowntown.color.setHex(0xef4444);
+        matRibbonCommercial.color.setHex(0xf97316);
         alarmLight.intensity = 2.5;
       } else if (type === 2) {
         bText.textContent = '🚨 DEADLINE BREACH ALARM: 500ms TRANSMISSION LAG DETECTED!';
@@ -1624,7 +1730,6 @@
         document.getElementById('system-dot').classList.add('fault');
         alarmLight.intensity = 3.5;
       } else if (type === 3) {
-        // Simulate toxic gas surge
         bText.textContent = '⚡ TOXIC GAS DETECTED (MQ-135 PIN 13) - EMERGENCY PURGING ACTIVE';
         banner.classList.add('show');
         smokeMat.color.setHex(0xef4444);
@@ -1635,7 +1740,6 @@
     }
 
     function resetFaults() {
-      fetch('/api/fault?action=reset').catch(() => {});
       playBeep(880, 'sine', 0.15);
       const banner = document.getElementById('alert-banner');
       banner.classList.remove('show');
@@ -1663,9 +1767,6 @@
       playBeep(700, 'sine', 0.05);
     }
 
-    // =========================================================================
-    // 12. CAMERA PRESETS & SMOOTH TRANSITIONS
-    // =========================================================================
     let isDriverView = false;
 
     function focusComponent(name) {
@@ -1696,7 +1797,6 @@
       isLerpingCamera = true;
     }
 
-    // Keyboard Hotkeys
     document.addEventListener('keydown', (e) => {
       if (e.key === '1') injectFault(1);
       if (e.key === '2') injectFault(2);
@@ -1706,7 +1806,7 @@
     });
 
     // =========================================================================
-    // 13. ANIMATION RENDER LOOP
+    // 12. ANIMATION LOOP
     // =========================================================================
     let clock = new THREE.Clock();
 
@@ -1716,22 +1816,24 @@
       const delta = clock.getDelta();
       const time = clock.getElapsedTime();
 
-      // River Water Wave Rippling Animation
-      const pos = riverGeom.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const u = pos.getX(i);
-        const v = pos.getY(i);
-        pos.setZ(i, Math.sin(u * 0.15 + time * 2.5) * 0.35 + Math.cos(v * 0.3 + time * 1.8) * 0.2);
-      }
-      pos.needsUpdate = true;
+      // Animate Google Maps Traffic Flow Light Pulses
+      flowPulses.forEach(p => {
+        const u = p.userData;
+        if (u.axis === 'z') {
+          p.position.z += u.speed * u.dir;
+          if (Math.abs(p.position.z) > 100) p.position.z = -100 * u.dir;
+        } else {
+          p.position.x += u.speed * u.dir;
+          if (Math.abs(p.position.x) > 100) p.position.x = -100 * u.dir;
+        }
+      });
 
-      // Animate Smoke Plume Particles
-      smokeParticles.forEach((p, idx) => {
+      // Animate Smoke Plume
+      smokeParticles.forEach((p) => {
         p.position.y += p.userData.vy;
         p.position.x += p.userData.vx;
         p.position.z += p.userData.vz;
-        const currentScale = p.scale.x;
-        p.scale.setScalar(currentScale + p.userData.scaleSpeed * delta);
+        p.scale.setScalar(p.scale.x + p.userData.scaleSpeed * delta);
 
         if (p.position.y > 48) {
           p.position.set(
@@ -1743,21 +1845,14 @@
         }
       });
 
-      // Spin Weather Radar Dish
       if (radarDish) {
         radarDish.rotation.y += delta * 2.5;
       }
 
-      // Rotate Sweeping Spot & Emergency Alarm Light
       if (alarmLight.intensity > 0) {
         sweepingSpot.target.position.x = Math.sin(time * 5) * 60;
         sweepingSpot.target.position.z = Math.cos(time * 5) * 60;
         alarmLight.intensity = 2.5 + Math.sin(time * 8) * 1.5;
-      }
-
-      // Pulse High-Voltage Power Arc
-      if (arcMesh) {
-        arcMesh.material.opacity = 0.6 + Math.sin(time * 12) * 0.35;
       }
 
       // Dynamic Cars Animation
@@ -1774,14 +1869,12 @@
         }
       });
 
-      // Driver View Camera Follow
       if (isDriverView && cars.length > 0) {
         const leadCar = cars[0];
         const offset = new THREE.Vector3(0, 3.5, -8).applyAxisAngle(new THREE.Vector3(0, 1, 0), leadCar.rotation.y);
         camera.position.lerp(leadCar.position.clone().add(offset), 0.1);
         controls.target.lerp(leadCar.position.clone().add(new THREE.Vector3(0, 1.5, 0)), 0.1);
       } else if (isLerpingCamera) {
-        // Smooth camera lerp
         camera.position.lerp(targetCameraPos, 0.08);
         controls.target.lerp(targetCameraLook, 0.08);
         if (camera.position.distanceTo(targetCameraPos) < 0.2) {
@@ -1796,7 +1889,6 @@
 
     animate();
 
-    // Resize Handler
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();

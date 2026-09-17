@@ -761,11 +761,22 @@ class AtomicSensorState:
             self.env_raw["timestamp"] = time.time()
 
     # P4 Analytics Writer
-    def update_analytics(self, speed, congestion, aqi, heat_idx, comfort, pwr):
+    def update_analytics(self, speed, congestion, aqi, heat_idx, comfort, pwr, density_pct=None, density_level=None, sectors=None):
         with self._lock:
+            dpct = density_pct if density_pct is not None else congestion
+            dlevel = density_level or ("GRIDLOCK" if dpct > 75 else ("HEAVY" if dpct > 50 else ("MODERATE" if dpct > 28 else "FREE FLOW")))
+            sec = sectors or {
+                "downtown": round(dpct, 1),
+                "commercial": round(dpct * 0.72, 1),
+                "waterfront": round(dpct * 0.38, 1),
+                "industrial": round(dpct * 0.58, 1)
+            }
             self.analytics["traffic_speed"]     = speed
-            self.analytics["congestion_pct"]    = congestion
-            self.analytics["congestion_level"]  = "HIGH" if congestion > 65 else ("MODERATE" if congestion > 35 else "LOW")
+            self.analytics["congestion_pct"]    = dpct
+            self.analytics["density_pct"]       = dpct
+            self.analytics["density_level"]     = dlevel
+            self.analytics["congestion_level"]  = dlevel
+            self.analytics["sectors"]           = sec
             self.analytics["aqi"]               = aqi
             self.analytics["air_quality_label"] = "HAZARDOUS" if aqi > 150 else ("POOR" if aqi > 100 else "GOOD")
             self.analytics["heat_index_c"]      = heat_idx
@@ -798,8 +809,11 @@ class AtomicSensorState:
                     "unit": "km/h",
                     "vehicle_count": self.traffic_raw["total_vehicles"],
                     "beam_blocked": self.traffic_raw["beam_blocked"],
-                    "congestion_pct": self.analytics["congestion_pct"],
-                    "congestion_level": self.analytics["congestion_level"],
+                    "density_pct": self.analytics.get("density_pct", 24.0),
+                    "density_level": self.analytics.get("density_level", "FREE FLOW"),
+                    "sectors": self.analytics.get("sectors", {"downtown": 24.0, "commercial": 18.0, "waterfront": 10.0, "industrial": 14.0}),
+                    "congestion_pct": self.analytics.get("density_pct", 24.0),
+                    "congestion_level": self.analytics.get("density_level", "FREE FLOW"),
                     "freshness_ms": self.fault_status["traffic_freshness_ms"],
                     "stale": self.fault_status["traffic_stale"]
                 },
@@ -934,27 +948,52 @@ def thread_p4_analytics():
         t_start = metric.begin_tick()
         now = time.monotonic()
 
-        # 1. Traffic Analytics
+        # 1. Traffic Density & Flow Analytics (Greenshields Traffic Flow Model)
         with sensor_state._lock:
             # Filter vehicles in 30-second window
             sensor_state.traffic_raw["event_times"] = [
                 t for t in sensor_state.traffic_raw["event_times"] if t >= now - WINDOW
             ]
             recent_count = len(sensor_state.traffic_raw["event_times"])
+            beam_blocked = sensor_state.traffic_raw["beam_blocked"]
             gas_alert    = sensor_state.air_raw["gas_alert"]
             temp         = sensor_state.env_raw["temperature"]
             hum          = sensor_state.env_raw["humidity"]
 
-        vpm   = (recent_count / WINDOW) * 60.0
-        speed = round(min(120.0, max(10.0, vpm * 2.2)), 1)
-        congestion_pct = round(min(100.0, (vpm / 40.0) * 100.0), 1)
+        vpm = (recent_count / WINDOW) * 60.0
+
+        if beam_blocked:
+            # Active obstacle/standstill queue detected at sensor gate
+            speed = 6.0
+            density_pct = min(100.0, 84.0 + (recent_count * 2.0))
+        else:
+            # Free-flow base speed (55 km/h) reduced by accumulated flow
+            speed = round(max(14.0, min(75.0, 56.0 - (vpm * 1.1))), 1)
+            density_pct = round(min(100.0, max(8.0, (vpm / 22.0) * 55.0 + (recent_count * 1.2))), 1)
+
+        # Standard Level of Service (LOS) Density Categorization
+        if density_pct >= 75.0:
+            density_level = "GRIDLOCK"
+        elif density_pct >= 50.0:
+            density_level = "HEAVY"
+        elif density_pct >= 28.0:
+            density_level = "MODERATE"
+        else:
+            density_level = "FREE FLOW"
+
+        # Multi-Sector Density Distribution (Google Maps Area Breakdown)
+        sectors = {
+            "downtown":   round(density_pct, 1),
+            "commercial": round(max(5.0, min(100.0, density_pct * 0.72)), 1),
+            "waterfront": round(max(5.0, min(100.0, density_pct * 0.38)), 1),
+            "industrial": round(max(5.0, min(100.0, density_pct * 0.58)), 1)
+        }
 
         # 2. Air Quality Analytics
         aqi = 195.0 if gas_alert else (22.0 + (recent_count * 1.5))
 
         # 3. Environmental Heat / Comfort Analytics
         if temp is not None and hum is not None:
-            # Rothfusz Heat Index regression approximation
             heat_idx = round(temp + 0.05 * hum, 1)
             comfort  = "COMFORTABLE" if (20.0 <= temp <= 26.0 and 40.0 <= hum <= 65.0) else "SUB-OPTIMAL"
         else:
@@ -965,7 +1004,8 @@ def thread_p4_analytics():
         t_factor = (temp or 25.0) / 25.0
         power_mw = round(390.0 + (vpm * 0.8) + (t_factor * 15.0), 1)
 
-        sensor_state.update_analytics(speed, congestion_pct, aqi, heat_idx, comfort, power_mw)
+        sensor_state.update_analytics(speed, density_pct, aqi, heat_idx, comfort, power_mw,
+                                      density_pct=density_pct, density_level=density_level, sectors=sectors)
 
         metric.end_tick(t_start)
         time.sleep(metric.period_s)
@@ -1047,13 +1087,16 @@ def thread_p1_twin_synchronizer(sock):
 
         # 2. Package Multi-Subsystem Telemetry Streams
         packets = [
-            # Traffic Stream
+            # Traffic Stream (Greenshields Density Model)
             {
                 "stream": "traffic",
                 "value": snap["traffic"]["val"],
                 "unit": "km/h",
                 "vehicle_count": snap["traffic"]["vehicle_count"],
                 "beam_blocked": snap["traffic"]["beam_blocked"],
+                "density_pct": snap["traffic"]["density_pct"],
+                "density_level": snap["traffic"]["density_level"],
+                "sectors": snap["traffic"]["sectors"],
                 "congestion_pct": snap["traffic"]["congestion_pct"],
                 "congestion_level": snap["traffic"]["congestion_level"],
                 "freshness_ms": snap["traffic"]["freshness_ms"],

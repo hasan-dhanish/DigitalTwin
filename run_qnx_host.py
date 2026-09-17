@@ -39,7 +39,17 @@ g_telemetry = {
     "stale_count": 0,
     "watchdog": "HEALTHY",
     "streams": {
-        "traffic": {"val": 45.0, "unit": "km/h", "vehicle_count": 0, "beam_blocked": False, "freshness_ms": 12.4, "stale": False},
+        "traffic": {
+            "val": 45.0,
+            "unit": "km/h",
+            "vehicle_count": 0,
+            "beam_blocked": False,
+            "density_pct": 24.0,
+            "density_level": "FREE FLOW",
+            "sectors": {"downtown": 24.0, "commercial": 18.0, "waterfront": 10.0, "industrial": 14.0},
+            "freshness_ms": 12.4,
+            "stale": False
+        },
         "power":   {"val": 410.0, "unit": "MW",   "freshness_ms": 18.1, "stale": False},
         "water":   {"val": 65.0,  "unit": "PSI",  "freshness_ms": 22.5, "stale": False},
         "air":     {"val": 28.0,  "unit": "AQI",  "gas_alert": False, "alert_count": 0, "freshness_ms": 45.0, "stale": False},
@@ -74,6 +84,15 @@ def udp_receiver():
                     g_telemetry["streams"]["traffic"]["val"]           = float(val)
                     g_telemetry["streams"]["traffic"]["vehicle_count"] = payload.get("vehicle_count", 0)
                     g_telemetry["streams"]["traffic"]["beam_blocked"]  = payload.get("beam_blocked", False)
+                    g_telemetry["streams"]["traffic"]["density_pct"]   = float(payload.get("density_pct", payload.get("congestion_pct", 24.0)))
+                    g_telemetry["streams"]["traffic"]["density_level"] = payload.get("density_level", payload.get("congestion_level", "FREE FLOW"))
+                    dpct = g_telemetry["streams"]["traffic"]["density_pct"]
+                    g_telemetry["streams"]["traffic"]["sectors"]       = payload.get("sectors", {
+                        "downtown": dpct,
+                        "commercial": round(dpct * 0.72, 1),
+                        "waterfront": round(dpct * 0.38, 1),
+                        "industrial": round(dpct * 0.58, 1)
+                    })
                     g_telemetry["streams"]["traffic"]["freshness_ms"]  = payload.get("freshness_ms", 10.0)
                     g_telemetry["streams"]["traffic"]["stale"]         = payload.get("stale", False)
 
@@ -161,6 +180,16 @@ def mqtt_subscriber():
                         g_telemetry["streams"]["traffic"]["vehicle_count"] = payload["vehicle_count"]
                     if "beam_blocked" in payload:
                         g_telemetry["streams"]["traffic"]["beam_blocked"] = payload["beam_blocked"]
+                    if "density_pct" in payload or "congestion_pct" in payload:
+                        dpct = float(payload.get("density_pct", payload.get("congestion_pct", 24.0)))
+                        g_telemetry["streams"]["traffic"]["density_pct"] = dpct
+                        g_telemetry["streams"]["traffic"]["density_level"] = payload.get("density_level", payload.get("congestion_level", "FREE FLOW"))
+                        g_telemetry["streams"]["traffic"]["sectors"] = payload.get("sectors", {
+                            "downtown": dpct,
+                            "commercial": round(dpct * 0.72, 1),
+                            "waterfront": round(dpct * 0.38, 1),
+                            "industrial": round(dpct * 0.58, 1)
+                        })
 
                 elif sid == "air" or "air" in topic:
                     if "value" in payload:
