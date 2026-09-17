@@ -291,36 +291,38 @@
       font-family: var(--font-mono);
     }
 
-    /* Google Maps Traffic Density Gauge & Sector Heatmap Breakdown */
+    /* Neon Glowing Traffic Density Gauge & Sector Heatmap Breakdown */
     .density-bar-container {
       width: 100%;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
+      height: 7px;
+      background: rgba(255, 255, 255, 0.08);
       border-radius: 4px;
       overflow: hidden;
       margin: 6px 0 8px 0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .density-bar-fill {
       height: 100%;
       width: 24%;
-      background: var(--green-accent);
+      background: #00ffcc;
       border-radius: 4px;
       transition: width 0.4s ease, background-color 0.4s ease;
-      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+      box-shadow: 0 0 12px rgba(0, 255, 204, 0.8), 0 0 4px #00ffcc;
     }
 
     .sector-traffic-list {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 5px;
       font-family: var(--font-mono);
       font-size: 10px;
-      background: rgba(0, 0, 0, 0.22);
-      padding: 6px 8px;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 7px 10px;
       border-radius: 6px;
       margin-bottom: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(0, 255, 204, 0.18);
+      box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4);
     }
 
     .sector-item {
@@ -333,13 +335,14 @@
       color: var(--text-muted);
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
     }
 
     .sector-val {
       font-weight: 700;
-      color: var(--green-accent);
-      transition: color 0.3s;
+      color: #00ffcc;
+      transition: color 0.3s, text-shadow 0.3s;
+      text-shadow: 0 0 8px currentColor;
     }
 
     /* Live Alarm Alert Banner Overlay */
@@ -1064,79 +1067,142 @@
     }
 
     // =========================================================================
-    // 4. 🗺️ GOOGLE MAPS STYLE 3D TRAFFIC DENSITY RIBBONS
+    // 4. 🗺️ SLEEK NEON GLOWING TRAFFIC DENSITY CONDUITS (THIN LASER + BLOOM HALO)
     // =========================================================================
     const trafficRibbonsGroup = new THREE.Group();
     scene.add(trafficRibbonsGroup);
 
-    // Sector Ribbon Materials
-    const matRibbonDowntown = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.72 });
-    const matRibbonCommercial = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.72 });
-    const matRibbonWaterfront = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.72 });
-    const matRibbonIndustrial = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.72 });
+    // Neon Material Definitions (Core Laser = Additive High Intensity; Halo = Diffuse Additive Bloom)
+    const matRibbonDowntown = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
+    const matHaloDowntown   = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false });
+
+    const matRibbonCommercial = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
+    const matHaloCommercial   = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false });
+
+    const matRibbonWaterfront = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
+    const matHaloWaterfront   = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false });
+
+    const matRibbonIndustrial = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
+    const matHaloIndustrial   = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false });
+
+    // Cyber boundary rails (0.2 width neon track along road borders)
+    const matEdgeRail = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending });
+
+    // Builder for sleek, thin neon laser tracks on dual traffic lanes
+    function buildNeonCorridor(axis, centerPos, length, coreMat, haloMat) {
+      const g = new THREE.Group();
+      const laneOffset = 4.2; // Offset from centerline to traffic lane center
+      const coreW = 0.85;     // Thin high-intensity laser line width
+      const haloW = 2.80;     // Glowing neon aura halo width
+
+      [-laneOffset, laneOffset].forEach(offset => {
+        if (axis === 'z') {
+          // North-South Corridor
+          // 1. Neon Bloom Diffusion Halo
+          const halo = new THREE.Mesh(new THREE.PlaneGeometry(haloW, length), haloMat);
+          halo.rotation.x = -Math.PI / 2;
+          halo.position.set(centerPos.x + offset, 0.23, centerPos.z);
+          g.add(halo);
+
+          // 2. Core Intense Thin Laser Conduit
+          const core = new THREE.Mesh(new THREE.PlaneGeometry(coreW, length), coreMat);
+          core.rotation.x = -Math.PI / 2;
+          core.position.set(centerPos.x + offset, 0.25, centerPos.z);
+          g.add(core);
+        } else {
+          // East-West Corridor
+          // 1. Neon Bloom Diffusion Halo
+          const halo = new THREE.Mesh(new THREE.PlaneGeometry(length, haloW), haloMat);
+          halo.rotation.x = -Math.PI / 2;
+          halo.position.set(centerPos.x, 0.23, centerPos.z + offset);
+          g.add(halo);
+
+          // 2. Core Intense Thin Laser Conduit
+          const core = new THREE.Mesh(new THREE.PlaneGeometry(length, coreW), coreMat);
+          core.rotation.x = -Math.PI / 2;
+          core.position.set(centerPos.x, 0.25, centerPos.z + offset);
+          g.add(core);
+        }
+      });
+
+      // Subtle Outer Edge Rails
+      [-8.6, 8.6].forEach(offset => {
+        if (axis === 'z') {
+          const rail = new THREE.Mesh(new THREE.PlaneGeometry(0.2, length), matEdgeRail);
+          rail.rotation.x = -Math.PI / 2;
+          rail.position.set(centerPos.x + offset, 0.24, centerPos.z);
+          g.add(rail);
+        } else {
+          const rail = new THREE.Mesh(new THREE.PlaneGeometry(length, 0.2), matEdgeRail);
+          rail.rotation.x = -Math.PI / 2;
+          rail.position.set(centerPos.x, 0.24, centerPos.z + offset);
+          g.add(rail);
+        }
+      });
+
+      return g;
+    }
 
     // Sector 1: Downtown Arterial (North-South central corridor, through IR gate)
-    const ribbonDowntown = new THREE.Mesh(new THREE.PlaneGeometry(16.5, 90), matRibbonDowntown);
-    ribbonDowntown.rotation.x = -Math.PI / 2;
-    ribbonDowntown.position.set(0, 0.24, 0);
+    const ribbonDowntown = buildNeonCorridor('z', { x: 0, z: 0 }, 90, matRibbonDowntown, matHaloDowntown);
     trafficRibbonsGroup.add(ribbonDowntown);
 
     // Sector 2: Commercial Boulevard (East-West west wing)
-    const ribbonCommercial = new THREE.Mesh(new THREE.PlaneGeometry(90, 16.5), matRibbonCommercial);
-    ribbonCommercial.rotation.x = -Math.PI / 2;
-    ribbonCommercial.position.set(-50, 0.24, 0);
+    const ribbonCommercial = buildNeonCorridor('x', { x: -50, z: 0 }, 90, matRibbonCommercial, matHaloCommercial);
     trafficRibbonsGroup.add(ribbonCommercial);
 
     // Sector 3: Waterfront Bypass (North corridor along river)
-    const ribbonWaterfront = new THREE.Mesh(new THREE.PlaneGeometry(16.5, 90), matRibbonWaterfront);
-    ribbonWaterfront.rotation.x = -Math.PI / 2;
-    ribbonWaterfront.position.set(0, 0.24, -75);
+    const ribbonWaterfront = buildNeonCorridor('z', { x: 0, z: -75 }, 90, matRibbonWaterfront, matHaloWaterfront);
     trafficRibbonsGroup.add(ribbonWaterfront);
 
     // Sector 4: Industrial Ring (East-West east wing)
-    const ribbonIndustrial = new THREE.Mesh(new THREE.PlaneGeometry(90, 16.5), matRibbonIndustrial);
-    ribbonIndustrial.rotation.x = -Math.PI / 2;
-    ribbonIndustrial.position.set(50, 0.24, 0);
+    const ribbonIndustrial = buildNeonCorridor('x', { x: 50, z: 0 }, 90, matRibbonIndustrial, matHaloIndustrial);
     trafficRibbonsGroup.add(ribbonIndustrial);
 
-    // Animated Traffic Flow Pulses (Chevrons / Glowing Dashes)
+    // Glowing Neon Traffic Flow Photon Pulses (Energy Streaks moving along tracks)
     const flowPulses = [];
-    const pulseGeom = new THREE.PlaneGeometry(1.2, 3.5);
-    const pulseMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+    const pulseGeom = new THREE.PlaneGeometry(0.7, 4.2);
+    const pulseMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending
+    });
 
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 22; i++) {
       const p = new THREE.Mesh(pulseGeom, pulseMat.clone());
       p.rotation.x = -Math.PI / 2;
       const isNS = (i % 2 === 0);
+      const lane = (i % 4 < 2) ? 4.2 : -4.2;
       p.userData = {
         axis: isNS ? 'z' : 'x',
         dir: (i % 4 < 2) ? 1 : -1,
-        speed: 0.6,
-        lane: (i % 4 < 2) ? 4.5 : -4.5
+        speed: 0.75 + (i % 4) * 0.12,
+        lane: lane
       };
       if (isNS) {
-        p.position.set(p.userData.lane, 0.26, (Math.random() - 0.5) * 180);
+        p.position.set(lane, 0.27, (Math.random() - 0.5) * 190);
       } else {
-        p.position.set((Math.random() - 0.5) * 180, 0.26, p.userData.lane);
+        p.position.set((Math.random() - 0.5) * 190, 0.27, lane);
         p.rotation.z = Math.PI / 2;
       }
       trafficRibbonsGroup.add(p);
       flowPulses.push(p);
     }
 
-    // Helper: Density to Google Maps Color
+    // Helper: Vibrant Neon Spectrum for Real-Time Traffic Density
     function getDensityColor(pct) {
-      if (pct >= 75) return 0xef4444; // Red (Gridlock)
-      if (pct >= 50) return 0xf97316; // Orange (Heavy)
-      if (pct >= 28) return 0xf59e0b; // Yellow (Moderate)
-      return 0x10b981;               // Green (Free Flow)
+      if (pct >= 75) return 0xff0055; // High-voltage Neon Crimson/Laser Magenta (Gridlock)
+      if (pct >= 50) return 0xff5500; // Electric Neon Solar Orange (Heavy)
+      if (pct >= 28) return 0xffcc00; // Neon Cyber Gold (Moderate)
+      return 0x00ffcc;               // Hyper Neon Aqua/Mint Emerald (Free Flow)
     }
 
     function getDensityHexStr(pct) {
-      if (pct >= 75) return '#ef4444';
-      if (pct >= 50) return '#f97316';
-      if (pct >= 28) return '#f59e0b';
-      return '#10b981';
+      if (pct >= 75) return '#ff0055';
+      if (pct >= 50) return '#ff5500';
+      if (pct >= 28) return '#ffcc00';
+      return '#00ffcc';
     }
 
     // =========================================================================
@@ -1543,11 +1609,22 @@
             beamEl.style.color = isBlocked ? '#ef4444' : '#10b981';
           }
 
-          // Update 3D Google Maps Traffic Ribbons
-          matRibbonDowntown.color.setHex(getDensityColor(sectors.downtown));
-          matRibbonCommercial.color.setHex(getDensityColor(sectors.commercial));
-          matRibbonWaterfront.color.setHex(getDensityColor(sectors.waterfront));
-          matRibbonIndustrial.color.setHex(getDensityColor(sectors.industrial));
+          // Update 3D Neon Google Maps Traffic Conduits (Core Laser + Bloom Halo)
+          const colDown = getDensityColor(sectors.downtown);
+          matRibbonDowntown.color.setHex(colDown);
+          matHaloDowntown.color.setHex(colDown);
+
+          const colComm = getDensityColor(sectors.commercial);
+          matRibbonCommercial.color.setHex(colComm);
+          matHaloCommercial.color.setHex(colComm);
+
+          const colWater = getDensityColor(sectors.waterfront);
+          matRibbonWaterfront.color.setHex(colWater);
+          matHaloWaterfront.color.setHex(colWater);
+
+          const colInd = getDensityColor(sectors.industrial);
+          matRibbonIndustrial.color.setHex(colInd);
+          matHaloIndustrial.color.setHex(colInd);
 
           // Update 3D Floating Pins
           const pinT = document.getElementById('pin-traffic');
@@ -1717,8 +1794,10 @@
         document.getElementById('badge-density-los').style.color = '#ef4444';
         document.getElementById('density-bar-fill').style.width = '95%';
         document.getElementById('density-bar-fill').style.backgroundColor = '#ef4444';
-        matRibbonDowntown.color.setHex(0xef4444);
-        matRibbonCommercial.color.setHex(0xf97316);
+        matRibbonDowntown.color.setHex(0xff0055);
+        matHaloDowntown.color.setHex(0xff0055);
+        matRibbonCommercial.color.setHex(0xff5500);
+        matHaloCommercial.color.setHex(0xff5500);
         alarmLight.intensity = 2.5;
       } else if (type === 2) {
         bText.textContent = '🚨 DEADLINE BREACH ALARM: 500ms TRANSMISSION LAG DETECTED!';
@@ -1753,6 +1832,15 @@
       sweepingSpot.intensity = 0;
       smokeMat.color.setHex(0xe2e8f0);
       smokeMat.opacity = 0.35;
+
+      matRibbonDowntown.color.setHex(0x00ffcc);
+      matHaloDowntown.color.setHex(0x00ffcc);
+      matRibbonCommercial.color.setHex(0x00ffcc);
+      matHaloCommercial.color.setHex(0x00ffcc);
+      matRibbonWaterfront.color.setHex(0x00ffcc);
+      matHaloWaterfront.color.setHex(0x00ffcc);
+      matRibbonIndustrial.color.setHex(0x00ffcc);
+      matHaloIndustrial.color.setHex(0x00ffcc);
     }
 
     function toggleFaultPanel() {
@@ -1816,7 +1904,14 @@
       const delta = clock.getDelta();
       const time = clock.getElapsedTime();
 
-      // Animate Google Maps Traffic Flow Light Pulses
+      // Animate Dynamic Neon Glow Breathing Halo (Cyberpunk Pulse)
+      const haloBreath = 0.40 + Math.sin(time * 3.6) * 0.14;
+      matHaloDowntown.opacity = haloBreath;
+      matHaloCommercial.opacity = haloBreath;
+      matHaloWaterfront.opacity = haloBreath;
+      matHaloIndustrial.opacity = haloBreath;
+
+      // Animate Neon Traffic Flow Energy Photon Pulses
       flowPulses.forEach(p => {
         const u = p.userData;
         if (u.axis === 'z') {
@@ -1826,6 +1921,7 @@
           p.position.x += u.speed * u.dir;
           if (Math.abs(p.position.x) > 100) p.position.x = -100 * u.dir;
         }
+        p.material.opacity = 0.72 + Math.sin(time * 7.5 + p.position.x + p.position.z) * 0.26;
       });
 
       // Animate Smoke Plume
