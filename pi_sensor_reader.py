@@ -70,115 +70,211 @@ PUD_UP      = 0b01
 PUD_DOWN    = 0b10
 
 # ==============================================================================
-#  QNX Physical Memory Driver  (ctypes + libc mmap with MAP_PHYS)
+#  QNX Physical Memory Driver  (ctypes + ThreadCtl + mmap_device_memory / MAP_PHYS)
 # ==============================================================================
 
-# QNX Neutrino mmap() flags
-PROT_READ  = 0x1
-PROT_WRITE = 0x2
-MAP_SHARED = 0x0001
-MAP_PHYS   = 0x10000    # QNX-specific: map physical address without a file fd
-NOFD       = -1          # Used instead of a file descriptor with MAP_PHYS
+# QNX Neutrino constants
+_NTO_TCTL_IO      = 1       # sys/neutrino.h: grant hardware I/O privileges to thread
+_NTO_TCTL_IO_PRIV = 2
 
-MAP_FAILED_VALUE = ctypes.c_void_p(-1).value
+PROT_READ    = 0x01
+PROT_WRITE   = 0x02
+PROT_NOCACHE = 0x800        # sys/mman.h: disable caching for MMIO registers
+MAP_SHARED   = 0x0001
+MAP_PHYS     = 0x00010000   # sys/mman.h: map physical memory
+NOFD         = -1
 
 
 class BCM2711GPIO:
     """
-    Raspberry Pi 4 GPIO driver using QNX-native physical memory mapping.
+    Raspberry Pi 4 GPIO driver for QNX Neutrino RTOS (and Linux fallback).
 
-    QNX does not have /dev/mem. Instead, mmap() is called with MAP_PHYS
-    to directly map physical hardware registers into process address space.
-    This is the standard QNX Neutrino pattern for MMIO device access.
+    On QNX Neutrino:
+      1. Calls ThreadCtl(_NTO_TCTL_IO, 0) to grant hardware I/O privilege.
+      2. Calls mmap_device_memory() (or mmap with MAP_PHYS) to map BCM2711
+         GPIO peripheral registers (0xFE200000) directly into process space.
+      3. If direct MMIO is unavailable, tries QNX's 'rpi_gpio' Python module.
 
-    Requires: root privileges (to map physical memory)
+    On Linux / Raspbian:
+      Falls back to /dev/gpiomem or /dev/mem.
     """
 
     def __init__(self):
-        self._gpio_ptr = None    # ctypes pointer to mapped GPIO register block
-        self._libc     = None
-        self._available = False
+        self._gpio_ptr      = None
+        self._libc          = None
+        self._available     = False
+        self._use_devmem    = False
+        self._use_rpi_gpio  = False
+        self._rpi_gpio      = None
+        self._method        = "None"
+        self._mapped_base   = None
         self._open()
 
+    @staticmethod
+    def _is_valid_ptr(ptr):
+        """Check if pointer returned from mmap/mmap_device_memory is valid."""
+        if ptr is None:
+            return False
+        val = ptr if isinstance(ptr, int) else ptr.value
+        if val is None or val == 0 or val == -1:
+            return False
+        # Invert checking for MAP_FAILED ((void*)-1) across 32-bit and 64-bit
+        bits = ctypes.sizeof(ctypes.c_void_p) * 8
+        if val == ((1 << bits) - 1) or val == 0xFFFFFFFF or val == 0xFFFFFFFFFFFFFFFF:
+            return False
+        return True
+
+    @staticmethod
+    def _to_uintptr(ptr):
+        """Convert a ctypes pointer or int to an unsigned integer address."""
+        val = ptr if isinstance(ptr, int) else ptr.value
+        bits = ctypes.sizeof(ctypes.c_void_p) * 8
+        return val & ((1 << bits) - 1)
+
     def _open(self):
-        """Map BCM2711 GPIO registers via libc mmap(MAP_PHYS)."""
-        try:
-            # Load the C runtime library (libc.so on QNX)
-            lib_name = ctypes.util.find_library("c")
-            if lib_name is None:
-                lib_name = "libc.so"    # QNX default
-            self._libc = ctypes.CDLL(lib_name)
+        """Initialize GPIO access using QNX native calls or fallbacks."""
+        print("[GPIO] Initializing hardware interface...")
 
-            # Configure mmap() signature explicitly for correct calling convention
-            self._libc.mmap.restype  = ctypes.c_void_p
-            self._libc.mmap.argtypes = [
-                ctypes.c_void_p,   # addr hint (NULL = let OS choose)
-                ctypes.c_size_t,   # length
-                ctypes.c_int,      # prot  (PROT_READ | PROT_WRITE)
-                ctypes.c_int,      # flags (MAP_SHARED | MAP_PHYS on QNX)
-                ctypes.c_int,      # fd    (NOFD = -1 with MAP_PHYS)
-                ctypes.c_ulong,    # offset = physical address of GPIO block
-            ]
+        # 1. Load libc
+        libc = None
+        for name in [None, "libc.so", "libc.so.5", "libc.so.6", "libc.so.7", "libc.so.8"]:
+            try:
+                libc = ctypes.CDLL(name, use_errno=True) if name else ctypes.CDLL(None, use_errno=True)
+                if hasattr(libc, "mmap_device_memory") or hasattr(libc, "mmap"):
+                    print(f"[GPIO] Loaded C library: {name or 'process default'}")
+                    break
+            except Exception:
+                continue
 
-            ptr = self._libc.mmap(
-                None,
-                BLOCK_SIZE,
-                PROT_READ | PROT_WRITE,
-                MAP_SHARED | MAP_PHYS,
-                NOFD,
-                BCM2711_GPIO_BASE
-            )
+        self._libc = libc
 
-            if ptr == MAP_FAILED_VALUE or ptr is None:
-                # Try Linux /dev/mem as secondary fallback (Raspbian etc.)
-                self._open_devmem()
+        # 2. On QNX: request I/O hardware privileges via ThreadCtl
+        if self._libc and hasattr(self._libc, "ThreadCtl"):
+            for cmd, cname in [(_NTO_TCTL_IO, "_NTO_TCTL_IO"), (_NTO_TCTL_IO_PRIV, "_NTO_TCTL_IO_PRIV")]:
+                try:
+                    self._libc.ThreadCtl.argtypes = [ctypes.c_int, ctypes.c_void_p]
+                    self._libc.ThreadCtl.restype  = ctypes.c_int
+                    ret = self._libc.ThreadCtl(cmd, None)
+                    if ret == 0:
+                        print(f"[GPIO] QNX ThreadCtl({cname}): I/O privilege granted.")
+                        break
+                    else:
+                        err = ctypes.get_errno()
+                        print(f"[GPIO] QNX ThreadCtl({cname}) returned {ret}, errno={err} ({os.strerror(err)})")
+                except Exception as e:
+                    print(f"[GPIO] ThreadCtl({cname}) failed: {e}")
+
+        # 3. Attempt QNX mmap_device_memory()
+        prot = PROT_READ | PROT_WRITE | PROT_NOCACHE
+        candidate_bases = [BCM2711_GPIO_BASE, 0x3F200000]
+
+        if self._libc and hasattr(self._libc, "mmap_device_memory"):
+            try:
+                self._libc.mmap_device_memory.argtypes = [
+                    ctypes.c_void_p,
+                    ctypes.c_size_t,
+                    ctypes.c_int,
+                    ctypes.c_int,
+                    ctypes.c_uint64,
+                ]
+                self._libc.mmap_device_memory.restype = ctypes.c_void_p
+
+                for base in candidate_bases:
+                    ptr = self._libc.mmap_device_memory(None, BLOCK_SIZE, prot, 0, base)
+                    if self._is_valid_ptr(ptr):
+                        self._gpio_ptr    = self._to_uintptr(ptr)
+                        self._available   = True
+                        self._mapped_base = base
+                        self._method      = "QNX mmap_device_memory"
+                        print(f"[GPIO] SUCCESS: BCM2711 mapped via mmap_device_memory() @ 0x{base:08X} (vaddr=0x{self._gpio_ptr:X})")
+                        return
+                    else:
+                        err = ctypes.get_errno()
+                        print(f"[GPIO] mmap_device_memory(0x{base:08X}) failed: errno={err} ({os.strerror(err)})")
+            except Exception as e:
+                print(f"[GPIO] mmap_device_memory exception: {e}")
+
+        # 4. Attempt QNX mmap(MAP_PHYS)
+        if self._libc and hasattr(self._libc, "mmap"):
+            try:
+                self._libc.mmap.argtypes = [
+                    ctypes.c_void_p,
+                    ctypes.c_size_t,
+                    ctypes.c_int,
+                    ctypes.c_int,
+                    ctypes.c_int,
+                    ctypes.c_uint64,
+                ]
+                self._libc.mmap.restype = ctypes.c_void_p
+
+                for base in candidate_bases:
+                    ptr = self._libc.mmap(None, BLOCK_SIZE, prot, MAP_SHARED | MAP_PHYS, NOFD, base)
+                    if self._is_valid_ptr(ptr):
+                        self._gpio_ptr    = self._to_uintptr(ptr)
+                        self._available   = True
+                        self._mapped_base = base
+                        self._method      = "QNX mmap(MAP_PHYS)"
+                        print(f"[GPIO] SUCCESS: BCM2711 mapped via mmap(MAP_PHYS) @ 0x{base:08X} (vaddr=0x{self._gpio_ptr:X})")
+                        return
+                    else:
+                        err = ctypes.get_errno()
+                        print(f"[GPIO] mmap(MAP_PHYS, 0x{base:08X}) failed: errno={err} ({os.strerror(err)})")
+            except Exception as e:
+                print(f"[GPIO] mmap(MAP_PHYS) exception: {e}")
+
+        # 5. Check if QNX BSP 'rpi_gpio' module is installed
+        for mod_name in ["rpi_gpio", "RPi.GPIO"]:
+            try:
+                mod = __import__(mod_name)
+                self._rpi_gpio     = mod
+                self._rpi_gpio.setmode(self._rpi_gpio.BCM)
+                self._use_rpi_gpio = True
+                self._available    = True
+                self._method       = f"Python module '{mod_name}'"
+                print(f"[GPIO] SUCCESS: Using '{mod_name}' module driver.")
                 return
+            except Exception:
+                pass
 
-            self._gpio_ptr = ptr
-            self._available = True
-            print(f"[GPIO] BCM2711 registers mapped via mmap(MAP_PHYS) @ 0x{BCM2711_GPIO_BASE:08X}")
+        # 6. Fallback: Linux /dev/gpiomem or /dev/mem
+        for dev_path in ["/dev/gpiomem", "/dev/mem"]:
+            if os.path.exists(dev_path):
+                try:
+                    import mmap as mmap_mod
+                    fd = os.open(dev_path, os.O_RDWR | os.O_SYNC)
+                    offset = 0 if dev_path == "/dev/gpiomem" else BCM2711_GPIO_BASE
+                    self._mmap_obj   = mmap_mod.mmap(fd, BLOCK_SIZE, mmap_mod.MAP_SHARED,
+                                                     mmap_mod.PROT_READ | mmap_mod.PROT_WRITE,
+                                                     offset=offset)
+                    os.close(fd)
+                    self._use_devmem  = True
+                    self._available   = True
+                    self._method      = f"Linux {dev_path}"
+                    print(f"[GPIO] SUCCESS: BCM2711 mapped via {dev_path}")
+                    return
+                except Exception as e:
+                    print(f"[GPIO] {dev_path} open failed: {e}")
 
-        except Exception as e:
-            print(f"[GPIO] ctypes mmap failed: {e}")
-            # Try /dev/mem fallback (works on Linux/Raspbian)
-            self._open_devmem()
-
-    def _open_devmem(self):
-        """Fallback: map GPIO via /dev/mem (Linux / Raspbian)."""
-        dev_mem_path = "/dev/mem"
-        try:
-            import mmap as mmap_mod
-            fd = os.open(dev_mem_path, os.O_RDWR | os.O_SYNC)
-            self._mmap_obj = mmap_mod.mmap(
-                fd, BLOCK_SIZE,
-                mmap_mod.MAP_SHARED,
-                mmap_mod.PROT_READ | mmap_mod.PROT_WRITE,
-                offset=BCM2711_GPIO_BASE
-            )
-            os.close(fd)
-            # Wrap as a ctypes array for consistent register access
-            self._gpio_ptr = None           # Will use _mmap_obj path
-            self._available = True
-            self._use_devmem = True
-            print("[GPIO] BCM2711 registers mapped via /dev/mem (Linux fallback)")
-            return
-        except PermissionError:
-            print()
-            print("[GPIO] ===================================================")
-            print("[GPIO] ERROR: Permission denied.")
-            print("[GPIO] Re-run with:  sudo python3 pi_sensor_reader.py")
-            print("[GPIO] ===================================================")
-            print()
-            sys.exit(1)
-        except FileNotFoundError:
-            print("[GPIO] ERROR: Neither MAP_PHYS (QNX) nor /dev/mem (Linux) worked.")
-            print("[GPIO] Make sure you are running ON the Raspberry Pi 4.")
-            sys.exit(1)
-        except Exception as e:
-            print(f"[GPIO] ERROR: {e}")
-            sys.exit(1)
-
-        self._use_devmem = False
+        # 7. Complete Diagnostic Report on Failure
+        print()
+        print("[GPIO] ================= DIAGNOSTIC REPORT =================")
+        print(f"[GPIO] OS platform   : {sys.platform}")
+        if hasattr(os, "uname"):
+            print(f"[GPIO] OS uname      : {os.uname()}")
+        if hasattr(os, "geteuid"):
+            euid = os.geteuid()
+            print(f"[GPIO] Effective UID : {euid} {'(ROOT)' if euid == 0 else '(NON-ROOT — run with sudo!)'}")
+        if os.path.exists("/dev"):
+            try:
+                devs = [f for f in os.listdir("/dev") if any(k in f.lower() for k in ["gpio", "mem", "bcm"])]
+                print(f"[GPIO] /dev entries  : {devs if devs else 'none matching gpio/mem'}")
+            except Exception:
+                pass
+        print("[GPIO] =====================================================")
+        print("[GPIO] ERROR: Could not map GPIO registers through any method.")
+        print("[GPIO] Action: Please make sure to run: sudo python3 pi_sensor_reader.py")
+        print("[GPIO] =====================================================")
+        sys.exit(1)
 
     # -------------------------------------------------------------------------
     #  Register Read / Write
@@ -190,6 +286,8 @@ class BCM2711GPIO:
             import struct
             self._mmap_obj.seek(offset)
             return struct.unpack("<I", self._mmap_obj.read(4))[0]
+        elif getattr(self, "_use_rpi_gpio", False):
+            return 0
         else:
             addr = self._gpio_ptr + offset
             return ctypes.c_uint32.from_address(addr).value
@@ -200,6 +298,8 @@ class BCM2711GPIO:
             import struct
             self._mmap_obj.seek(offset)
             self._mmap_obj.write(struct.pack("<I", value & 0xFFFFFFFF))
+        elif getattr(self, "_use_rpi_gpio", False):
+            return
         else:
             addr = self._gpio_ptr + offset
             ctypes.c_uint32.from_address(addr).value = value & 0xFFFFFFFF
@@ -209,7 +309,11 @@ class BCM2711GPIO:
     # -------------------------------------------------------------------------
 
     def set_direction(self, pin, direction):
-        """Set pin as GPIO_INPUT or GPIO_OUTPUT via GPFSEL registers."""
+        """Set pin as GPIO_INPUT or GPIO_OUTPUT."""
+        if getattr(self, "_use_rpi_gpio", False):
+            mode = self._rpi_gpio.OUT if direction == GPIO_OUTPUT else self._rpi_gpio.IN
+            self._rpi_gpio.setup(pin, mode)
+            return
         fsel_offset = GPFSEL0 + (pin // 10) * 4
         bit_shift   = (pin % 10) * 3
         val = self._reg_read(fsel_offset)
@@ -221,8 +325,11 @@ class BCM2711GPIO:
         """
         Set pull-up/down for a pin using BCM2711 GPPUPPDN registers.
         BCM2711 (Pi 4) uses 2-bit fields: 00=off, 01=pull-up, 10=pull-down
-        This is DIFFERENT from Pi 3 (which used GPPUD + GPPUDCLK sequence).
         """
+        if getattr(self, "_use_rpi_gpio", False):
+            p = self._rpi_gpio.PUD_UP if pud == PUD_UP else (self._rpi_gpio.PUD_DOWN if pud == PUD_DOWN else self._rpi_gpio.PUD_OFF)
+            self._rpi_gpio.setup(pin, self._rpi_gpio.IN, pull_up_down=p)
+            return
         if pin < 16:
             reg, shift = GPPUPPDN0, pin * 2
         else:
@@ -237,25 +344,38 @@ class BCM2711GPIO:
     # -------------------------------------------------------------------------
 
     def output_high(self, pin):
-        """Drive pin HIGH via GPSET0."""
+        """Drive pin HIGH."""
+        if getattr(self, "_use_rpi_gpio", False):
+            self._rpi_gpio.output(pin, self._rpi_gpio.HIGH)
+            return
         self._reg_write(GPSET0, 1 << pin)
 
     def output_low(self, pin):
-        """Drive pin LOW via GPCLR0."""
+        """Drive pin LOW."""
+        if getattr(self, "_use_rpi_gpio", False):
+            self._rpi_gpio.output(pin, self._rpi_gpio.LOW)
+            return
         self._reg_write(GPCLR0, 1 << pin)
 
     def input(self, pin):
-        """Read current pin level from GPLEV0. Returns 0 or 1."""
+        """Read current pin level. Returns 0 or 1."""
+        if getattr(self, "_use_rpi_gpio", False):
+            return 1 if self._rpi_gpio.input(pin) else 0
         return (self._reg_read(GPLEV0) >> pin) & 1
 
     def cleanup(self):
-        """Unmap physical GPIO memory."""
+        """Clean up GPIO resources."""
         try:
-            if getattr(self, "_use_devmem", False) and self._mmap_obj:
+            if getattr(self, "_use_rpi_gpio", False) and self._rpi_gpio:
+                self._rpi_gpio.cleanup()
+            elif getattr(self, "_use_devmem", False) and self._mmap_obj:
                 self._mmap_obj.close()
             elif self._gpio_ptr and self._libc:
-                self._libc.munmap(self._gpio_ptr, BLOCK_SIZE)
-            print("[GPIO] Physical memory unmapped cleanly.")
+                if hasattr(self._libc, "munmap_device_memory"):
+                    self._libc.munmap_device_memory(ctypes.c_void_p(self._gpio_ptr), BLOCK_SIZE)
+                elif hasattr(self._libc, "munmap"):
+                    self._libc.munmap(ctypes.c_void_p(self._gpio_ptr), BLOCK_SIZE)
+            print("[GPIO] Resources released cleanly.")
         except Exception:
             pass
 
@@ -552,7 +672,7 @@ def main():
     os.system("clear")
     print(BANNER)
     print()
-    print(f"  GPIO Method  : {'QNX MAP_PHYS' if not getattr(gpio, '_use_devmem', False) else 'Linux /dev/mem'}")
+    print(f"  GPIO Method  : {getattr(gpio, '_method', 'Unknown')}")
     print(f"  DHT11        : GPIO {PIN_DHT11}  (Pin 7)   Temp + Humidity  @ 0.5 Hz")
     print(f"  IR Sensor    : GPIO {PIN_IR} (Pin 11)  Vehicle Detection @ 50 Hz")
     print(f"  MQ135        : GPIO {PIN_MQ135} (Pin 13)  Gas / Smoke Alert @ 2 Hz")
