@@ -606,6 +606,8 @@ SCHED_FIFO  = 1
 SCHED_RR    = 2
 SCHED_OTHER = 3
 
+_NTO_TCTL_RUNMASK = 4   # QNX sys/neutrino.h: ThreadCtl command to set CPU affinity mask
+
 def set_qnx_thread_priority(priority=100, policy=SCHED_FIFO):
     """Assign deterministic real-time scheduling priority to calling thread."""
     try:
@@ -621,15 +623,39 @@ def set_qnx_thread_priority(priority=100, policy=SCHED_FIFO):
         pass
     return False
 
+def set_qnx_thread_affinity(core_mask=0x01):
+    """
+    Assign CPU Core Affinity mask to calling thread (QNX ThreadCtl / Linux fallback).
+    RPi 4 Quad-Core Cortex-A72:
+      0x01 = Core 0 | 0x02 = Core 1 | 0x04 = Core 2 | 0x08 = Core 3
+    """
+    try:
+        if getattr(gpio, "_libc", None) and hasattr(gpio._libc, "ThreadCtl"):
+            res = gpio._libc.ThreadCtl(_NTO_TCTL_RUNMASK, ctypes.c_void_p(core_mask))
+            if res == 0:
+                return True
+    except Exception:
+        pass
+    try:
+        if hasattr(os, "sched_setaffinity"):
+            cores = [i for i in range(4) if (core_mask & (1 << i))]
+            os.sched_setaffinity(0, set(cores))
+            return True
+    except Exception:
+        pass
+    return False
+
 
 class TaskMetrics:
-    """Real-time task performance & deadline compliance tracker."""
-    def __init__(self, name, rate_hz, deadline_ms, priority):
+    """Real-time task performance, CPU affinity & deadline compliance tracker."""
+    def __init__(self, name, rate_hz, deadline_ms, priority, core_mask=0x01, core_name="Core 0"):
         self.name             = name
         self.rate_hz          = rate_hz
         self.period_s         = 1.0 / rate_hz
         self.deadline_ms      = deadline_ms
         self.priority         = priority
+        self.core_mask        = core_mask
+        self.core_name        = core_name
         self.total_ticks      = 0
         self.deadline_misses  = 0
         self.exec_time_ms     = 0.0
@@ -660,27 +686,20 @@ class TaskMetrics:
         return True       # Met deadline
 
 
-# Task Definitions (QNX Multi-Rate Scheduling Policy)
+# Task Definitions (Exact QNX 4-Tier Priority Architecture with CPU Core Isolation)
 # ------------------------------------------------------------------------------
-# 1. Traffic Task    : 50 Hz (20ms period),  Deadline: 5.0ms,   Priority: 220 (High)
-# 2. Sync / UDP Task : 20 Hz (50ms period),  Deadline: 15.0ms,  Priority: 200 (Medium-High)
-# 3. Air Quality Task: 2 Hz  (500ms period), Deadline: 10.0ms,  Priority: 150 (Medium)
-# 4. Environment Task: 0.5 Hz(2000ms period),Deadline: 120.0ms, Priority: 100 (Low)
-# ------------------------------------------------------------------------------
-# Task Definitions (Exact QNX 4-Tier Priority Architecture)
-# ------------------------------------------------------------------------------
-# Priority 1 (Highest : Level 250) - Twin Synchronizer : Maintain consistent snapshot & UDP publish
-# Priority 2 (High    : Level 200) - Fault Monitor     : Detect stale data, missed deadlines & faults
-# Priority 3 (Medium  : Level 150) - Data Acquisition   : Read/receive traffic, air, environment
-# Priority 4 (Low     : Level  80) - Analytics         : Calculate traffic/energy/environment metrics
+# Priority 1 (Highest : Level 250) - Twin Synchronizer : Core 0 (0x01) - 20 Hz, <15ms
+# Priority 2 (High    : Level 200) - Fault Monitor     : Core 1 (0x02) - 20 Hz, <5ms
+# Priority 3 (Medium  : Level 150) - Hardware DAQ      : Core 2 (0x04) - IR 50Hz, MQ 2Hz, DHT 0.5Hz
+# Priority 4 (Low     : Level  80) - City Analytics    : Core 3 (0x08) - 5 Hz, <50ms
 # ------------------------------------------------------------------------------
 task_metrics = {
-    "p1_synchronizer": TaskMetrics("P1_Twin_Synchronizer", rate_hz=20.0, deadline_ms=15.0,  priority=250),
-    "p2_fault_monitor":TaskMetrics("P2_Fault_Monitor",     rate_hz=20.0, deadline_ms=5.0,   priority=200),
-    "p3_acq_traffic":  TaskMetrics("P3_Acq_Traffic_IR",    rate_hz=50.0, deadline_ms=5.0,   priority=150),
-    "p3_acq_air":      TaskMetrics("P3_Acq_Air_MQ135",     rate_hz=2.0,  deadline_ms=10.0,  priority=150),
-    "p3_acq_env":      TaskMetrics("P3_Acq_Env_DHT11",     rate_hz=0.5,  deadline_ms=120.0, priority=150),
-    "p4_analytics":    TaskMetrics("P4_City_Analytics",    rate_hz=5.0,  deadline_ms=50.0,  priority=80),
+    "p1_synchronizer": TaskMetrics("P1_Twin_Synchronizer", rate_hz=20.0, deadline_ms=15.0,  priority=250, core_mask=0x01, core_name="Core 0"),
+    "p2_fault_monitor":TaskMetrics("P2_Fault_Monitor",     rate_hz=20.0, deadline_ms=5.0,   priority=200, core_mask=0x02, core_name="Core 1"),
+    "p3_acq_traffic":  TaskMetrics("P3_Acq_Traffic_IR",    rate_hz=50.0, deadline_ms=5.0,   priority=150, core_mask=0x04, core_name="Core 2"),
+    "p3_acq_air":      TaskMetrics("P3_Acq_Air_MQ135",     rate_hz=2.0,  deadline_ms=10.0,  priority=150, core_mask=0x04, core_name="Core 2"),
+    "p3_acq_env":      TaskMetrics("P3_Acq_Env_DHT11",     rate_hz=0.5,  deadline_ms=120.0, priority=150, core_mask=0x04, core_name="Core 2"),
+    "p4_analytics":    TaskMetrics("P4_City_Analytics",    rate_hz=5.0,  deadline_ms=50.0,  priority=80,  core_mask=0x08, core_name="Core 3"),
 }
 
 
@@ -858,11 +877,12 @@ _start_time  = time.monotonic()
 # ==============================================================================
 
 def thread_p3_acq_traffic():
-    """P3 Data Acquisition: IR Sensor (50 Hz, 20ms period, Priority: 150)"""
-    set_qnx_thread_priority(task_metrics["p3_acq_traffic"].priority)
-    print(f"[P3 Acquisition] IR Traffic     | Rate: 50 Hz | Deadline: 5.0ms  | QNX Priority: 150")
-
+    """P3 Data Acquisition: IR Sensor (50 Hz, 20ms period, Priority: 150, Core 2)"""
     metric = task_metrics["p3_acq_traffic"]
+    set_qnx_thread_priority(metric.priority)
+    set_qnx_thread_affinity(metric.core_mask)
+    print(f"[P3 Acquisition] IR Traffic     | Rate: 50 Hz | Deadline: 5.0ms  | Prio: 150 | {metric.core_name}")
+
     last_lvl = 1
 
     while True:
@@ -884,11 +904,12 @@ def thread_p3_acq_traffic():
 
 
 def thread_p3_acq_air():
-    """P3 Data Acquisition: MQ135 Air Quality (2 Hz, 500ms period, Priority: 150)"""
-    set_qnx_thread_priority(task_metrics["p3_acq_air"].priority)
-    print(f"[P3 Acquisition] MQ135 Air      | Rate: 2 Hz  | Deadline: 10.0ms | QNX Priority: 150")
-
+    """P3 Data Acquisition: MQ135 Air Quality (2 Hz, 500ms period, Priority: 150, Core 2)"""
     metric = task_metrics["p3_acq_air"]
+    set_qnx_thread_priority(metric.priority)
+    set_qnx_thread_affinity(metric.core_mask)
+    print(f"[P3 Acquisition] MQ135 Air      | Rate: 2 Hz  | Deadline: 10.0ms | Prio: 150 | {metric.core_name}")
+
     prev_alert = False
 
     while True:
@@ -912,11 +933,12 @@ def thread_p3_acq_air():
 
 
 def thread_p3_acq_environment():
-    """P3 Data Acquisition: DHT11 Sensor (0.5 Hz, 2000ms period, Priority: 150)"""
-    set_qnx_thread_priority(task_metrics["p3_acq_env"].priority)
-    print(f"[P3 Acquisition] DHT11 Env      | Rate: 0.5 Hz| Deadline: 120ms  | QNX Priority: 150")
-
+    """P3 Data Acquisition: DHT11 Sensor (0.5 Hz, 2000ms period, Priority: 150, Core 2)"""
     metric = task_metrics["p3_acq_env"]
+    set_qnx_thread_priority(metric.priority)
+    set_qnx_thread_affinity(metric.core_mask)
+    print(f"[P3 Acquisition] DHT11 Env      | Rate: 0.5 Hz| Deadline: 120ms  | Prio: 150 | {metric.core_name}")
+
 
     while True:
         t_start = metric.begin_tick()
@@ -937,11 +959,12 @@ def thread_p3_acq_environment():
 # ==============================================================================
 
 def thread_p4_analytics():
-    """Priority 4 Task: Real-Time Analytics & Sensor Fusion Engine (5 Hz, 200ms period)"""
-    set_qnx_thread_priority(task_metrics["p4_analytics"].priority)
-    print(f"[P4 Analytics]   City Analytics | Rate: 5 Hz  | Deadline: 50.0ms | QNX Priority: 80")
-
+    """Priority 4 Task: Real-Time Analytics & Sensor Fusion Engine (5 Hz, 200ms period, Core 3)"""
     metric = task_metrics["p4_analytics"]
+    set_qnx_thread_priority(metric.priority)
+    set_qnx_thread_affinity(metric.core_mask)
+    print(f"[P4 Analytics]   City Analytics | Rate: 5 Hz  | Deadline: 50.0ms | Prio: 80  | {metric.core_name}")
+
     WINDOW = 30.0  # 30-second rolling window for vehicle speed and flow
 
     while True:
@@ -1017,11 +1040,12 @@ def thread_p4_analytics():
 # ==============================================================================
 
 def thread_p2_fault_monitor():
-    """Priority 2 Task: Safety Watchdog & Deadline Compliance Monitor (20 Hz, 50ms)"""
-    set_qnx_thread_priority(task_metrics["p2_fault_monitor"].priority)
-    print(f"[P2 Monitor]     Fault Watchdog | Rate: 20 Hz | Deadline: 5.0ms  | QNX Priority: 200")
-
+    """Priority 2 Task: Safety Watchdog & Deadline Compliance Monitor (20 Hz, 50ms, Core 1)"""
     metric = task_metrics["p2_fault_monitor"]
+    set_qnx_thread_priority(metric.priority)
+    set_qnx_thread_affinity(metric.core_mask)
+    print(f"[P2 Monitor]     Fault Watchdog | Rate: 20 Hz | Deadline: 5.0ms  | Prio: 200 | {metric.core_name}")
+
 
     while True:
         t_start = metric.begin_tick()
@@ -1066,12 +1090,13 @@ def thread_p2_fault_monitor():
 # ==============================================================================
 
 def thread_p1_twin_synchronizer(sock):
-    """Priority 1 Task: Hard Real-Time Snapshot Synchronizer & Dual UDP/MQTT Publisher (20 Hz, 50ms)"""
-    set_qnx_thread_priority(task_metrics["p1_synchronizer"].priority)
-    print(f"[P1 Synchronizer]Twin Engine    | Rate: 20 Hz | Deadline: 15.0ms | QNX Priority: 250 (HIGHEST)")
+    """Priority 1 Task: Hard Real-Time Snapshot Synchronizer & Dual UDP/MQTT Publisher (20 Hz, 50ms, Core 0)"""
+    metric = task_metrics["p1_synchronizer"]
+    set_qnx_thread_priority(metric.priority)
+    set_qnx_thread_affinity(metric.core_mask)
+    print(f"[P1 Synchronizer]Twin Engine    | Rate: 20 Hz | Deadline: 15.0ms | Prio: 250 (HIGHEST) | {metric.core_name}")
     print(f"[P1 Synchronizer]Dual Channels  | UDP: {HOST_PC_IP}:{UDP_PORT} | MQTT: {HOST_PC_IP}:{MQTT_PORT}")
 
-    metric = task_metrics["p1_synchronizer"]
     mqtt_client = MiniMQTTClient(host=HOST_PC_IP, port=MQTT_PORT, client_id="QNX_Pi_Synchronizer")
 
     while True:
