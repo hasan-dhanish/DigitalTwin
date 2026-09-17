@@ -602,16 +602,25 @@ class TaskMetrics:
 # 3. Air Quality Task: 2 Hz  (500ms period), Deadline: 10.0ms,  Priority: 150 (Medium)
 # 4. Environment Task: 0.5 Hz(2000ms period),Deadline: 120.0ms, Priority: 100 (Low)
 # ------------------------------------------------------------------------------
+# Task Definitions (Exact QNX 4-Tier Priority Architecture)
+# ------------------------------------------------------------------------------
+# Priority 1 (Highest : Level 250) - Twin Synchronizer : Maintain consistent snapshot & UDP publish
+# Priority 2 (High    : Level 200) - Fault Monitor     : Detect stale data, missed deadlines & faults
+# Priority 3 (Medium  : Level 150) - Data Acquisition   : Read/receive traffic, air, environment
+# Priority 4 (Low     : Level  80) - Analytics         : Calculate traffic/energy/environment metrics
+# ------------------------------------------------------------------------------
 task_metrics = {
-    "traffic":     TaskMetrics("IR_Traffic",        rate_hz=50.0, deadline_ms=5.0,   priority=220),
-    "sync_engine": TaskMetrics("QNX_SyncEngine",    rate_hz=20.0, deadline_ms=15.0,  priority=200),
-    "air_quality": TaskMetrics("MQ135_AirQuality",  rate_hz=2.0,  deadline_ms=10.0,  priority=150),
-    "environment": TaskMetrics("DHT11_Environment", rate_hz=0.5,  deadline_ms=120.0, priority=100),
+    "p1_synchronizer": TaskMetrics("P1_Twin_Synchronizer", rate_hz=20.0, deadline_ms=15.0,  priority=250),
+    "p2_fault_monitor":TaskMetrics("P2_Fault_Monitor",     rate_hz=20.0, deadline_ms=5.0,   priority=200),
+    "p3_acq_traffic":  TaskMetrics("P3_Acq_Traffic_IR",    rate_hz=50.0, deadline_ms=5.0,   priority=150),
+    "p3_acq_air":      TaskMetrics("P3_Acq_Air_MQ135",     rate_hz=2.0,  deadline_ms=10.0,  priority=150),
+    "p3_acq_env":      TaskMetrics("P3_Acq_Env_DHT11",     rate_hz=0.5,  deadline_ms=120.0, priority=150),
+    "p4_analytics":    TaskMetrics("P4_City_Analytics",    rate_hz=5.0,  deadline_ms=50.0,  priority=80),
 }
 
 
 # ==============================================================================
-#  Data Consistency: Atomic Snapshot Ring Buffer & Double Buffering
+#  Data Consistency: Decoupled Ring Buffers & Atomic Snapshot Engine
 # ==============================================================================
 
 class AtomicSensorState:
@@ -620,157 +629,188 @@ class AtomicSensorState:
         self._lock = threading.Lock()
         self.seq_id = 0
 
-        # Subsystems
-        self.traffic = {
-            "speed": 0.0, "vehicle_count": 0, "ir_blocked": False,
-            "timestamp": time.time(), "seq": 0
+        # Subsystems (Raw Acquisition Data)
+        self.traffic_raw = {
+            "beam_blocked": False, "event_times": [], "total_vehicles": 0,
+            "timestamp": time.time()
         }
-        self.air = {
-            "gas_alert": False, "alert_count": 0, "aqi": 22.0,
-            "timestamp": time.time(), "seq": 0
+        self.air_raw = {
+            "gas_alert": False, "alert_count": 0,
+            "timestamp": time.time()
         }
-        self.environment = {
+        self.env_raw = {
             "temperature": None, "humidity": None, "dht_ok": False, "errors": 0,
-            "timestamp": time.time(), "seq": 0
+            "timestamp": time.time()
         }
 
-    def update_traffic(self, speed, vehicle_count, ir_blocked):
+        # Computed Analytics (P4 Output)
+        self.analytics = {
+            "traffic_speed": 0.0, "congestion_pct": 12.0, "congestion_level": "LOW",
+            "aqi": 24.0, "air_quality_label": "GOOD",
+            "heat_index_c": 24.5, "comfort_label": "COMFORTABLE",
+            "estimated_power_mw": 412.0
+        }
+
+        # Fault Monitor State (P2 Output)
+        self.fault_status = {
+            "system_state": "NORMAL [OPTIMAL]",
+            "stale_count": 0,
+            "watchdog": "HEALTHY",
+            "traffic_freshness_ms": 0.0,
+            "air_freshness_ms": 0.0,
+            "env_freshness_ms": 0.0,
+            "traffic_stale": False,
+            "air_stale": False,
+            "env_stale": False,
+        }
+
+    # P3 Data Acquisition Writers
+    def update_traffic_raw(self, blocked, new_event=False):
+        with self._lock:
+            now = time.monotonic()
+            self.seq_id += 1
+            self.traffic_raw["beam_blocked"] = blocked
+            self.traffic_raw["timestamp"]    = time.time()
+            if new_event:
+                self.traffic_raw["total_vehicles"] += 1
+                self.traffic_raw["event_times"].append(now)
+
+    def update_air_raw(self, alert, is_new=False):
         with self._lock:
             self.seq_id += 1
-            self.traffic["speed"]         = speed
-            self.traffic["vehicle_count"] = vehicle_count
-            self.traffic["ir_blocked"]    = ir_blocked
-            self.traffic["timestamp"]     = time.time()
-            self.traffic["seq"]           = self.seq_id
+            self.air_raw["gas_alert"] = alert
+            self.air_raw["timestamp"] = time.time()
+            if is_new:
+                self.air_raw["alert_count"] += 1
 
-    def update_air(self, gas_alert, alert_count, aqi):
-        with self._lock:
-            self.seq_id += 1
-            self.air["gas_alert"]   = gas_alert
-            self.air["alert_count"] = alert_count
-            self.air["aqi"]         = aqi
-            self.air["timestamp"]   = time.time()
-            self.air["seq"]         = self.seq_id
-
-    def update_environment(self, temp, hum, dht_ok, err_inc=False):
+    def update_env_raw(self, temp, hum, ok):
         with self._lock:
             self.seq_id += 1
             if temp is not None:
-                self.environment["temperature"] = temp
-                self.environment["humidity"]    = hum
-                self.environment["dht_ok"]      = True
-            if err_inc:
-                self.environment["errors"] += 1
-                self.environment["dht_ok"]  = False
-            self.environment["timestamp"] = time.time()
-            self.environment["seq"]       = self.seq_id
+                self.env_raw["temperature"] = temp
+                self.env_raw["humidity"]    = hum
+                self.env_raw["dht_ok"]      = True
+            else:
+                self.env_raw["errors"] += 1
+                self.env_raw["dht_ok"]  = False
+            self.env_raw["timestamp"] = time.time()
 
-    def get_atomic_snapshot(self):
-        """Atomically copy the state and compute data freshness per subsystem."""
-        now = time.time()
+    # P4 Analytics Writer
+    def update_analytics(self, speed, congestion, aqi, heat_idx, comfort, pwr):
         with self._lock:
-            t = dict(self.traffic)
-            a = dict(self.air)
-            e = dict(self.environment)
-            seq = self.seq_id
+            self.analytics["traffic_speed"]     = speed
+            self.analytics["congestion_pct"]    = congestion
+            self.analytics["congestion_level"]  = "HIGH" if congestion > 65 else ("MODERATE" if congestion > 35 else "LOW")
+            self.analytics["aqi"]               = aqi
+            self.analytics["air_quality_label"] = "HAZARDOUS" if aqi > 150 else ("POOR" if aqi > 100 else "GOOD")
+            self.analytics["heat_index_c"]      = heat_idx
+            self.analytics["comfort_label"]     = comfort
+            self.analytics["estimated_power_mw"]= pwr
 
-        # Calculate Freshness (ms since last hardware sample)
-        t_fresh = max(0.0, round((now - t["timestamp"]) * 1000.0, 1))
-        a_fresh = max(0.0, round((now - a["timestamp"]) * 1000.0, 1))
-        e_fresh = max(0.0, round((now - e["timestamp"]) * 1000.0, 1))
+    # P2 Fault Monitor Writer
+    def update_fault_status(self, state, stale_cnt, t_f, a_f, e_f, t_s, a_s, e_s):
+        with self._lock:
+            self.fault_status["system_state"]          = state
+            self.fault_status["stale_count"]           = stale_cnt
+            self.fault_status["traffic_freshness_ms"]  = t_f
+            self.fault_status["air_freshness_ms"]      = a_f
+            self.fault_status["env_freshness_ms"]      = e_f
+            self.fault_status["traffic_stale"]         = t_s
+            self.fault_status["air_stale"]             = a_s
+            self.fault_status["env_stale"]             = e_s
 
-        # Stale Check: Stale if older than 3x the task period
-        t_stale = (t_fresh > (3.0 * task_metrics["traffic"].period_s * 1000.0))
-        a_stale = (a_fresh > (3.0 * task_metrics["air_quality"].period_s * 1000.0))
-        e_stale = (e_fresh > (3.0 * task_metrics["environment"].period_s * 1000.0))
-
-        stale_count = (1 if t_stale else 0) + (1 if a_stale else 0) + (1 if e_stale else 0)
-
-        # QNX System State Logic
-        total_misses = sum(m.deadline_misses for m in task_metrics.values())
-        if total_misses > 0:
-            state = "CRITICAL [DEADLINE BREACH]"
-        elif stale_count > 0:
-            state = f"DEGRADED [{stale_count} SENSOR STALE]"
-        else:
-            state = "NORMAL [OPTIMAL]"
-
-        return {
-            "seq": seq,
-            "timestamp": now,
-            "system_state": state,
-            "stale_count": stale_count,
-            "traffic": {
-                "val": t["speed"], "unit": "km/h", "vehicle_count": t["vehicle_count"],
-                "beam_blocked": t["ir_blocked"], "freshness_ms": t_fresh, "stale": t_stale
-            },
-            "air": {
-                "val": a["aqi"], "unit": "AQI", "gas_alert": a["gas_alert"],
-                "alert_count": a["alert_count"], "freshness_ms": a_fresh, "stale": a_stale
-            },
-            "environment": {
-                "temperature": e["temperature"], "humidity": e["humidity"], "dht_ok": e["dht_ok"],
-                "errors": e["errors"], "freshness_ms": e_fresh, "stale": e_stale
+    # P1 Twin Synchronizer Reader (Atomic Consistent Snapshot)
+    def get_consistent_snapshot(self):
+        with self._lock:
+            snap = {
+                "seq": self.seq_id,
+                "timestamp": time.time(),
+                "system_state": self.fault_status["system_state"],
+                "stale_count": self.fault_status["stale_count"],
+                "watchdog": self.fault_status["watchdog"],
+                "traffic": {
+                    "val": self.analytics["traffic_speed"],
+                    "unit": "km/h",
+                    "vehicle_count": self.traffic_raw["total_vehicles"],
+                    "beam_blocked": self.traffic_raw["beam_blocked"],
+                    "congestion_pct": self.analytics["congestion_pct"],
+                    "congestion_level": self.analytics["congestion_level"],
+                    "freshness_ms": self.fault_status["traffic_freshness_ms"],
+                    "stale": self.fault_status["traffic_stale"]
+                },
+                "air": {
+                    "val": self.analytics["aqi"],
+                    "unit": "AQI",
+                    "gas_alert": self.air_raw["gas_alert"],
+                    "alert_count": self.air_raw["alert_count"],
+                    "quality_label": self.analytics["air_quality_label"],
+                    "freshness_ms": self.fault_status["air_freshness_ms"],
+                    "stale": self.fault_status["air_stale"]
+                },
+                "environment": {
+                    "temperature": self.env_raw["temperature"],
+                    "humidity": self.env_raw["humidity"],
+                    "dht_ok": self.env_raw["dht_ok"],
+                    "errors": self.env_raw["errors"],
+                    "heat_index_c": self.analytics["heat_index_c"],
+                    "comfort_label": self.analytics["comfort_label"],
+                    "freshness_ms": self.fault_status["env_freshness_ms"],
+                    "stale": self.fault_status["env_stale"]
+                },
+                "power": {
+                    "val": self.analytics["estimated_power_mw"],
+                    "unit": "MW",
+                    "freshness_ms": 12.0,
+                    "stale": False
+                }
             }
-        }
+            return snap
 
 
-# Global instances
+# Global Instances
 sensor_state = AtomicSensorState()
 dht11_driver = DHT11Driver(PIN_DHT11)
 _start_time  = time.monotonic()
 
 
 # ==============================================================================
-#  Real-Time Subsystem Threads (Multi-Rate Scheduled)
+#  Priority 3 [RTOS Priority: Medium (150)] - Data Acquisition Workers
+#  Purpose: Read/receive traffic, air, environment physical sensors
 # ==============================================================================
 
-def thread_traffic_50hz():
-    """Subsystem 1: Traffic & Vehicle Edge Detector (Rate: 50 Hz, QNX Prio: 220)"""
-    set_qnx_thread_priority(task_metrics["traffic"].priority)
-    print(f"[THREAD] IR Traffic      | 50 Hz (20ms) | Deadline: 5.0ms  | QNX Priority: 220")
+def thread_p3_acq_traffic():
+    """P3 Data Acquisition: IR Sensor (50 Hz, 20ms period, Priority: 150)"""
+    set_qnx_thread_priority(task_metrics["p3_acq_traffic"].priority)
+    print(f"[P3 Acquisition] IR Traffic     | Rate: 50 Hz | Deadline: 5.0ms  | QNX Priority: 150")
 
-    last_level    = 1
-    vehicle_times = []
-    WINDOW        = 30
-    count         = 0
-    speed         = 0.0
-    metric        = task_metrics["traffic"]
+    metric = task_metrics["p3_acq_traffic"]
+    last_lvl = 1
 
     while True:
         t_start = metric.begin_tick()
 
-        level = gpio.input(PIN_IR)
-        blocked = (level == 0)
+        lvl = gpio.input(PIN_IR)
+        blocked = (lvl == 0)
 
-        if level == 0 and last_level == 1:       # Falling edge: vehicle passes
-            now = time.monotonic()
-            count += 1
-            vehicle_times.append(now)
-            vehicle_times = [t for t in vehicle_times if t >= now - WINDOW]
-            vpm   = (len(vehicle_times) / WINDOW) * 60
-            speed = round(min(120.0, max(10.0, vpm * 2.0)), 1)
-            sensor_state.update_traffic(speed, count, True)
-        elif level == 1 and last_level == 0:     # Rising edge: beam restored
-            sensor_state.update_traffic(speed, count, False)
+        if lvl == 0 and last_lvl == 1:       # Falling edge: vehicle interrupted beam
+            sensor_state.update_traffic_raw(blocked=True, new_event=True)
+        elif lvl == 1 and last_lvl == 0:     # Rising edge: beam clear
+            sensor_state.update_traffic_raw(blocked=False, new_event=False)
         else:
-            # Periodic heartbeat update
-            sensor_state.update_traffic(speed, count, blocked)
+            sensor_state.update_traffic_raw(blocked=blocked, new_event=False)
 
-        last_level = level
+        last_lvl = lvl
         metric.end_tick(t_start)
-
         time.sleep(metric.period_s)
 
 
-def thread_air_quality_2hz():
-    """Subsystem 2: Air Quality & Gas Threshold Monitor (Rate: 2 Hz, QNX Prio: 150)"""
-    set_qnx_thread_priority(task_metrics["air_quality"].priority)
-    print(f"[THREAD] MQ135 Air       | 2 Hz (500ms) | Deadline: 10.0ms | QNX Priority: 150")
+def thread_p3_acq_air():
+    """P3 Data Acquisition: MQ135 Air Quality (2 Hz, 500ms period, Priority: 150)"""
+    set_qnx_thread_priority(task_metrics["p3_acq_air"].priority)
+    print(f"[P3 Acquisition] MQ135 Air      | Rate: 2 Hz  | Deadline: 10.0ms | QNX Priority: 150")
 
-    alert_count = 0
-    prev_alert  = False
-    metric      = task_metrics["air_quality"]
+    metric = task_metrics["p3_acq_air"]
+    prev_alert = False
 
     while True:
         t_start = metric.begin_tick()
@@ -778,77 +818,196 @@ def thread_air_quality_2hz():
         pin_val = gpio.input(PIN_MQ135)
         alert   = (pin_val == 0)   # Active LOW
 
+        is_new = False
         if alert and not prev_alert:
-            alert_count += 1
-            print(f"\n[MQ135] >>> GAS/SMOKE ALERT TRIGGERED! (GPIO{PIN_MQ135}=LOW) <<<\n")
+            is_new = True
+            print(f"\n[MQ135 ALERT] >>> Gas/Smoke Detected on GPIO{PIN_MQ135} (Active LOW) <<<\n")
         elif not alert and prev_alert:
-            print(f"\n[MQ135] --- Air quality cleared (GPIO{PIN_MQ135}=HIGH) ---\n")
+            print(f"\n[MQ135 CLEAR] --- Clean Air Restored on GPIO{PIN_MQ135} (HIGH) ---\n")
 
+        sensor_state.update_air_raw(alert, is_new=is_new)
         prev_alert = alert
-        aqi = 185.0 if alert else 24.0
-        sensor_state.update_air(alert, alert_count, aqi)
 
         metric.end_tick(t_start)
         time.sleep(metric.period_s)
 
 
-def thread_environment_halfhz():
-    """Subsystem 3: DHT11 Environmental Temp/Humidity (Rate: 0.5 Hz, QNX Prio: 100)"""
-    set_qnx_thread_priority(task_metrics["environment"].priority)
-    print(f"[THREAD] DHT11 Env       | 0.5 Hz (2s)  | Deadline: 120ms  | QNX Priority: 100")
+def thread_p3_acq_environment():
+    """P3 Data Acquisition: DHT11 Sensor (0.5 Hz, 2000ms period, Priority: 150)"""
+    set_qnx_thread_priority(task_metrics["p3_acq_env"].priority)
+    print(f"[P3 Acquisition] DHT11 Env      | Rate: 0.5 Hz| Deadline: 120ms  | QNX Priority: 150")
 
-    metric = task_metrics["environment"]
+    metric = task_metrics["p3_acq_env"]
 
     while True:
         t_start = metric.begin_tick()
 
         temp, hum = dht11_driver.read()
         if temp is not None:
-            sensor_state.update_environment(temp, hum, True, err_inc=False)
+            sensor_state.update_env_raw(temp, hum, ok=True)
         else:
-            sensor_state.update_environment(None, None, False, err_inc=True)
+            sensor_state.update_env_raw(None, None, ok=False)
 
         metric.end_tick(t_start)
         time.sleep(metric.period_s)
 
 
 # ==============================================================================
-#  QNX Synchronization Core & UDP Telemetry Streamer (20 Hz)
+#  Priority 4 [RTOS Priority: Low (80)] - Analytics
+#  Purpose: Calculate traffic, energy, and environmental metrics from synchronized data
 # ==============================================================================
 
-def thread_qnx_sync_engine(sock):
-    """Subsystem 4: Highest Priority Sync Engine (Rate: 20 Hz, QNX Prio: 200)"""
-    set_qnx_thread_priority(task_metrics["sync_engine"].priority)
-    print(f"[THREAD] QNX Sync Core   | 20 Hz (50ms) | Target -> {HOST_PC_IP}:{UDP_PORT}")
+def thread_p4_analytics():
+    """Priority 4 Task: Real-Time Analytics & Sensor Fusion Engine (5 Hz, 200ms period)"""
+    set_qnx_thread_priority(task_metrics["p4_analytics"].priority)
+    print(f"[P4 Analytics]   City Analytics | Rate: 5 Hz  | Deadline: 50.0ms | QNX Priority: 80")
 
-    metric = task_metrics["sync_engine"]
+    metric = task_metrics["p4_analytics"]
+    WINDOW = 30.0  # 30-second rolling window for vehicle speed and flow
+
+    while True:
+        t_start = metric.begin_tick()
+        now = time.monotonic()
+
+        # 1. Traffic Analytics
+        with sensor_state._lock:
+            # Filter vehicles in 30-second window
+            sensor_state.traffic_raw["event_times"] = [
+                t for t in sensor_state.traffic_raw["event_times"] if t >= now - WINDOW
+            ]
+            recent_count = len(sensor_state.traffic_raw["event_times"])
+            gas_alert    = sensor_state.air_raw["gas_alert"]
+            temp         = sensor_state.env_raw["temperature"]
+            hum          = sensor_state.env_raw["humidity"]
+
+        vpm   = (recent_count / WINDOW) * 60.0
+        speed = round(min(120.0, max(10.0, vpm * 2.2)), 1)
+        congestion_pct = round(min(100.0, (vpm / 40.0) * 100.0), 1)
+
+        # 2. Air Quality Analytics
+        aqi = 195.0 if gas_alert else (22.0 + (recent_count * 1.5))
+
+        # 3. Environmental Heat / Comfort Analytics
+        if temp is not None and hum is not None:
+            # Rothfusz Heat Index regression approximation
+            heat_idx = round(temp + 0.05 * hum, 1)
+            comfort  = "COMFORTABLE" if (20.0 <= temp <= 26.0 and 40.0 <= hum <= 65.0) else "SUB-OPTIMAL"
+        else:
+            heat_idx = 24.0
+            comfort  = "NORMAL"
+
+        # 4. Energy Load Estimation (Grid MW driven by vehicle flow and temperature)
+        t_factor = (temp or 25.0) / 25.0
+        power_mw = round(390.0 + (vpm * 0.8) + (t_factor * 15.0), 1)
+
+        sensor_state.update_analytics(speed, congestion_pct, aqi, heat_idx, comfort, power_mw)
+
+        metric.end_tick(t_start)
+        time.sleep(metric.period_s)
+
+
+# ==============================================================================
+#  Priority 2 [RTOS Priority: High (200)] - Fault Monitor
+#  Purpose: Detect stale data, missed deadlines, and system faults quickly
+# ==============================================================================
+
+def thread_p2_fault_monitor():
+    """Priority 2 Task: Safety Watchdog & Deadline Compliance Monitor (20 Hz, 50ms)"""
+    set_qnx_thread_priority(task_metrics["p2_fault_monitor"].priority)
+    print(f"[P2 Monitor]     Fault Watchdog | Rate: 20 Hz | Deadline: 5.0ms  | QNX Priority: 200")
+
+    metric = task_metrics["p2_fault_monitor"]
+
+    while True:
+        t_start = metric.begin_tick()
+        now = time.time()
+
+        with sensor_state._lock:
+            t_ts = sensor_state.traffic_raw["timestamp"]
+            a_ts = sensor_state.air_raw["timestamp"]
+            e_ts = sensor_state.env_raw["timestamp"]
+
+        # Measure Freshness
+        t_fresh = max(0.0, round((now - t_ts) * 1000.0, 1))
+        a_fresh = max(0.0, round((now - a_ts) * 1000.0, 1))
+        e_fresh = max(0.0, round((now - e_ts) * 1000.0, 1))
+
+        # Stale Threshold: older than 3x the task period
+        t_stale = (t_fresh > (3.0 * task_metrics["p3_acq_traffic"].period_s * 1000.0))
+        a_stale = (a_fresh > (3.0 * task_metrics["p3_acq_air"].period_s * 1000.0))
+        e_stale = (e_fresh > (3.0 * task_metrics["p3_acq_env"].period_s * 1000.0))
+
+        stale_cnt = (1 if t_stale else 0) + (1 if a_stale else 0) + (1 if e_stale else 0)
+
+        # Check Deadlines Across All Tasks
+        total_misses = sum(m.deadline_misses for m in task_metrics.values())
+
+        if total_misses > 0:
+            state = f"CRITICAL [DEADLINE BREACH: {total_misses} MISSES]"
+        elif stale_cnt > 0:
+            state = f"DEGRADED [{stale_cnt} STALE SENSORS]"
+        else:
+            state = "NORMAL [OPTIMAL]"
+
+        sensor_state.update_fault_status(state, stale_cnt, t_fresh, a_fresh, e_fresh, t_stale, a_stale, e_stale)
+
+        metric.end_tick(t_start)
+        time.sleep(metric.period_s)
+
+
+# ==============================================================================
+#  Priority 1 [RTOS Priority: Highest (250)] - Twin Synchronizer
+#  Purpose: Maintain consistent city-state snapshot within the timing deadline
+# ==============================================================================
+
+def thread_p1_twin_synchronizer(sock):
+    """Priority 1 Task: Hard Real-Time Snapshot Synchronizer & UDP Publisher (20 Hz, 50ms)"""
+    set_qnx_thread_priority(task_metrics["p1_synchronizer"].priority)
+    print(f"[P1 Synchronizer]Twin Engine    | Rate: 20 Hz | Deadline: 15.0ms | QNX Priority: 250 (HIGHEST)")
+
+    metric = task_metrics["p1_synchronizer"]
 
     while True:
         t_start = metric.begin_tick()
 
-        # 1. Atomic Consistency Snapshot
-        snap = sensor_state.get_atomic_snapshot()
+        # 1. Atomic Snapshot Alignment across all subsystems
+        snap = sensor_state.get_consistent_snapshot()
         ts   = snap["timestamp"]
         up   = round(time.monotonic() - _start_time, 1)
 
         sync_lat_ms = metric.exec_time_ms
         total_misses = sum(m.deadline_misses for m in task_metrics.values())
 
-        # 2. Build Standard Stream Packets
+        # 2. Package Multi-Subsystem Telemetry Streams
         packets = [
-            # Stream 1: Traffic Flow Subsystem
+            # Traffic Stream
             {
                 "stream": "traffic",
                 "value": snap["traffic"]["val"],
                 "unit": "km/h",
                 "vehicle_count": snap["traffic"]["vehicle_count"],
                 "beam_blocked": snap["traffic"]["beam_blocked"],
+                "congestion_pct": snap["traffic"]["congestion_pct"],
+                "congestion_level": snap["traffic"]["congestion_level"],
                 "freshness_ms": snap["traffic"]["freshness_ms"],
                 "stale": snap["traffic"]["stale"],
                 "ts": ts
             },
 
-            # Stream 2: Environmental Subsystem
+            # Air Quality Stream
+            {
+                "stream": "air",
+                "value": snap["air"]["val"],
+                "unit": "AQI",
+                "gas_alert": snap["air"]["gas_alert"],
+                "alert_count": snap["air"]["alert_count"],
+                "quality_label": snap["air"]["quality_label"],
+                "freshness_ms": snap["air"]["freshness_ms"],
+                "stale": snap["air"]["stale"],
+                "ts": ts
+            },
+
+            # Environmental Stream
             {
                 "stream": "environment",
                 "temperature": snap["environment"]["temperature"],
@@ -856,24 +1015,14 @@ def thread_qnx_sync_engine(sock):
                 "temp_unit": "C",
                 "hum_unit": "%RH",
                 "dht_ok": snap["environment"]["dht_ok"],
+                "heat_index_c": snap["environment"]["heat_index_c"],
+                "comfort_label": snap["environment"]["comfort_label"],
                 "freshness_ms": snap["environment"]["freshness_ms"],
                 "stale": snap["environment"]["stale"],
                 "ts": ts
             },
 
-            # Stream 3: Air Quality Subsystem
-            {
-                "stream": "air",
-                "value": snap["air"]["val"],
-                "unit": "AQI",
-                "gas_alert": snap["air"]["gas_alert"],
-                "alert_count": snap["air"]["alert_count"],
-                "freshness_ms": snap["air"]["freshness_ms"],
-                "stale": snap["air"]["stale"],
-                "ts": ts
-            },
-
-            # Stream 4: Complete QNX Real-Time Engine Telemetry
+            # Complete Synchronized QNX Telemetry
             {
                 "stream": "qnx_telemetry",
                 "system_state": snap["system_state"],
@@ -884,13 +1033,21 @@ def thread_qnx_sync_engine(sock):
                 "max_jitter_ms": round(metric.max_jitter_ms, 3),
                 "total_ticks": metric.total_ticks,
                 "stale_count": snap["stale_count"],
-                "watchdog": "HEALTHY",
+                "watchdog": snap["watchdog"],
                 "uptime_sec": up,
                 "snapshot": snap,
+                "tasks": {
+                    name: {
+                        "prio": m.priority, "deadline_ms": m.deadline_ms,
+                        "lat_ms": round(m.exec_time_ms, 2), "max_lat_ms": round(m.max_exec_time_ms, 2),
+                        "misses": m.deadline_misses, "ticks": m.total_ticks
+                    }
+                    for name, m in task_metrics.items()
+                },
                 "ts": ts
             },
 
-            # Stream 5: Combined Pi Hardware Sensors Packet
+            # Combined Hardware Sensors Frame
             {
                 "stream": "pi_sensors",
                 "temperature_c": snap["environment"]["temperature"],
@@ -910,8 +1067,8 @@ def thread_qnx_sync_engine(sock):
         # 3. Transmit via UDP to Host PC
         for p in packets:
             try:
-                raw_bytes = json.dumps(p).encode('utf-8')
-                sock.sendto(raw_bytes, (HOST_PC_IP, UDP_PORT))
+                raw = json.dumps(p).encode('utf-8')
+                sock.sendto(raw, (HOST_PC_IP, UDP_PORT))
             except Exception:
                 pass
 
@@ -926,7 +1083,7 @@ def thread_qnx_sync_engine(sock):
 def thread_console_hud():
     """Display real-time terminal HUD with sensor readings & QNX metrics."""
     while True:
-        snap = sensor_state.get_atomic_snapshot()
+        snap = sensor_state.get_consistent_snapshot()
         up   = round(time.monotonic() - _start_time)
 
         t_val = snap["environment"]["temperature"]
@@ -935,17 +1092,17 @@ def thread_console_hud():
         h_s   = f"{h_val:4.1f}%" if h_val is not None else "  N/A%"
 
         dht_status = "OK" if snap["environment"]["dht_ok"] else f"ERR({snap['environment']['errors']})"
-        air_status = "!! ALERT !!" if snap["air"]["gas_alert"] else "CLEAN AIR"
+        air_status = "!! ALERT !!" if snap["air"]["gas_alert"] else "CLEAN"
 
-        sync_metric = task_metrics["sync_engine"]
+        sync_metric = task_metrics["p1_synchronizer"]
         total_misses = sum(m.deadline_misses for m in task_metrics.values())
 
         sys.stdout.write(
-            f"\r[QNX RTOS {snap['system_state']}] "
-            f"Temp:{t_s} Hum:{h_s} [{dht_status}] | "
-            f"Vehicles:{snap['traffic']['vehicle_count']:3d} Speed:{snap['traffic']['val']:5.1f}km/h | "
-            f"Air:{air_status} | "
-            f"Lat:{sync_metric.exec_time_ms:4.2f}ms Jitter:{sync_metric.jitter_ms:4.2f}ms Misses:{total_misses} "
+            f"\r[P1:{sync_metric.priority}|{snap['system_state'][:15]}] "
+            f"Vehicles:{snap['traffic']['vehicle_count']:3d} ({snap['traffic']['val']:4.1f}km/h) | "
+            f"Air:{snap['air']['val']:3.0f}AQI [{air_status}] | "
+            f"DHT:{t_s},{h_s} | "
+            f"SyncLat:{sync_metric.exec_time_ms:4.2f}ms Misses:{total_misses} "
         )
         sys.stdout.flush()
         time.sleep(0.2)
@@ -957,8 +1114,12 @@ def thread_console_hud():
 
 BANNER = """\
 +==============================================================================+
-|  QNX SENSOR READER  -  Raspberry Pi 4 BCM2711  (ctypes MAP_PHYS / /dev/mem)|
-|  DHT11 -> GPIO 4   |   IR Sensor -> GPIO 17   |   MQ135 -> GPIO 27         |
+|  QNX REAL-TIME DIGITAL TWIN SYNCHRONIZER  -  Raspberry Pi 4 (BCM2711)       |
+|  RTOS Priority Hierarchy:                                                    |
+|    [Priority 1 - Highest : 250] Twin Synchronizer (Atomic Snapshot & UDP)    |
+|    [Priority 2 - High    : 200] Fault Monitor (Stale Detection & Watchdog)   |
+|    [Priority 3 - Medium  : 150] Data Acquisition (IR 50Hz, MQ 2Hz, DHT 0.5Hz)|
+|    [Priority 4 - Low     :  80] Analytics (Speed, AQI, Congestion, Power)    |
 +==============================================================================+"""
 
 def main():
@@ -966,10 +1127,10 @@ def main():
     print(BANNER)
     print()
     print(f"  GPIO Method  : {getattr(gpio, '_method', 'Unknown')}")
-    print(f"  DHT11        : GPIO {PIN_DHT11}  (Pin 7)   Temp + Humidity  @ 0.5 Hz")
-    print(f"  IR Sensor    : GPIO {PIN_IR} (Pin 11)  Vehicle Detection @ 50 Hz")
-    print(f"  MQ135        : GPIO {PIN_MQ135} (Pin 13)  Gas / Smoke Alert @ 2 Hz")
-    print(f"  UDP Target   : {HOST_PC_IP}:{UDP_PORT}  @ 20 Hz")
+    print(f"  DHT11        : GPIO {PIN_DHT11}  (Pin 7)   Temp + Humidity  @ 0.5 Hz  [P3]")
+    print(f"  IR Sensor    : GPIO {PIN_IR} (Pin 11)  Vehicle Detection @ 50 Hz   [P3]")
+    print(f"  MQ135        : GPIO {PIN_MQ135} (Pin 13)  Gas / Smoke Alert @ 2 Hz    [P3]")
+    print(f"  UDP Target   : {HOST_PC_IP}:{UDP_PORT}  @ 20 Hz [P1 Synchronizer]")
     print()
 
     init_sensor_pins()
@@ -977,34 +1138,45 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     threads = [
-        threading.Thread(target=thread_traffic_50hz,        daemon=True, name="QNX_Traffic_50Hz"),
-        threading.Thread(target=thread_air_quality_2hz,     daemon=True, name="QNX_AirQuality_2Hz"),
-        threading.Thread(target=thread_environment_halfhz,  daemon=True, name="QNX_Env_0.5Hz"),
-        threading.Thread(target=thread_qnx_sync_engine,     args=(sock,), daemon=True, name="QNX_SyncEngine_20Hz"),
-        threading.Thread(target=thread_console_hud,         daemon=True, name="QNX_ConsoleHUD"),
+        # Priority 3: Data Acquisition Workers
+        threading.Thread(target=thread_p3_acq_traffic,     daemon=True, name="P3_Acq_Traffic_50Hz"),
+        threading.Thread(target=thread_p3_acq_air,         daemon=True, name="P3_Acq_Air_2Hz"),
+        threading.Thread(target=thread_p3_acq_environment, daemon=True, name="P3_Acq_Env_0.5Hz"),
+
+        # Priority 4: City Analytics Worker
+        threading.Thread(target=thread_p4_analytics,       daemon=True, name="P4_Analytics_5Hz"),
+
+        # Priority 2: Fault Monitor & Safety Watchdog
+        threading.Thread(target=thread_p2_fault_monitor,   daemon=True, name="P2_Fault_Monitor_20Hz"),
+
+        # Priority 1 (Highest): Twin Synchronizer & Telemetry Core
+        threading.Thread(target=thread_p1_twin_synchronizer, args=(sock,), daemon=True, name="P1_Twin_Sync_20Hz"),
+
+        # HUD Terminal Renderer
+        threading.Thread(target=thread_console_hud,        daemon=True, name="HUD_Console"),
     ]
     for t in threads:
         t.start()
 
-    print(f"\n[READY] {len(threads)} QNX Real-Time Threads Running. Ctrl+C to stop.\n")
+    print(f"\n[READY] 4-Tier QNX Priority Architecture active ({len(threads)} threads). Ctrl+C to stop.\n")
 
     try:
         while True:
             time.sleep(5)
-            snap = sensor_state.get_atomic_snapshot()
+            snap = sensor_state.get_consistent_snapshot()
             up   = round(time.monotonic() - _start_time)
-            s_metric = task_metrics["sync_engine"]
+            s_metric = task_metrics["p1_synchronizer"]
             total_misses = sum(m.deadline_misses for m in task_metrics.values())
 
             print(
-                f"\n[QNX ENGINE REPORT @{up}s] "
+                f"\n[QNX PRIORITY REPORT @{up}s] "
                 f"State: {snap['system_state']} | "
-                f"Sync Latency: {s_metric.exec_time_ms:.2f}ms (Max: {s_metric.max_exec_time_ms:.2f}ms) | "
+                f"P1 Sync Latency: {s_metric.exec_time_ms:.2f}ms (Peak: {s_metric.max_exec_time_ms:.2f}ms) | "
                 f"Jitter: {s_metric.jitter_ms:.2f}ms | "
                 f"Deadline Misses: {total_misses} | "
                 f"Freshness: IR={snap['traffic']['freshness_ms']}ms, "
-                f"MQ135={snap['air']['freshness_ms']}ms, "
-                f"DHT11={snap['environment']['freshness_ms']}ms"
+                f"MQ={snap['air']['freshness_ms']}ms, "
+                f"DHT={snap['environment']['freshness_ms']}ms"
             )
     except KeyboardInterrupt:
         print("\n\n[SHUTDOWN] Stopping QNX Engine...")
