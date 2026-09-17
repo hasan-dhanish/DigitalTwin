@@ -406,103 +406,129 @@ def init_sensor_pins():
 
 class DHT11Driver:
     """
-    DHT11 single-wire protocol via direct BCM2711 register access.
+    High-Speed Bit-Bang DHT11 Driver via Direct BCM2711 GPLEV0 Register Access.
 
-    Timing (from DHT11 datasheet):
-      Start:  Host LOW >= 18ms, release HIGH
-      ACK:    DHT LOW ~80us, HIGH ~80us
-      Bit 0:  LOW ~50us, HIGH ~26-28us
-      Bit 1:  LOW ~50us, HIGH ~70us
-      Data:   [8b RH int][8b RH dec][8b T int][8b T dec][8b checksum]
+    Uses micro-cycle duration sampling with zero system-call overhead inside
+    the critical 40-bit transmission window, followed by dynamic pulse-width
+    thresholding between bit-0 (26-28us) and bit-1 (70us).
     """
 
-    MAX_ATTEMPTS = 3
+    MAX_ATTEMPTS = 5
 
     def __init__(self, pin):
         self.pin = pin
         self._last_temp = None
         self._last_hum  = None
-
-    def _wait_for(self, expected_level, timeout_us):
-        """Busy-wait until pin reaches expected level. Returns True on success."""
-        deadline = time.monotonic() + timeout_us / 1_000_000
-        while gpio.input(self.pin) != expected_level:
-            if time.monotonic() >= deadline:
-                return False
-        return True
+        self._first_ok  = False
 
     def _read_raw(self):
         pin = self.pin
 
-        # --- Start: drive LOW >= 18ms ---
+        # 1. Drive LOW for 20ms to initiate start signal
         gpio.set_direction(pin, GPIO_OUTPUT)
         gpio.output_low(pin)
-        time.sleep(0.018)
+        time.sleep(0.020)
 
-        # Release — DHT takes control of the line
+        # 2. Release line and configure as input with pull-up
         gpio.output_high(pin)
         gpio.set_direction(pin, GPIO_INPUT)
         gpio.set_pull(pin, PUD_UP)
 
-        # --- DHT ACK: LOW ~80us ---
-        if not self._wait_for(0, 150):
-            return None, None
+        # Pre-bind variables into local scope for maximum execution speed
+        pin_mask = 1 << pin
+        if getattr(gpio, "_gpio_ptr", None):
+            gplev_addr = gpio._gpio_ptr + GPLEV0
+            from_addr = ctypes.c_uint32.from_address
+            def read_pin():
+                return (from_addr(gplev_addr).value & pin_mask) != 0
+        else:
+            read_pin = lambda: gpio.input(pin) == 1
 
-        # --- DHT ACK: HIGH ~80us ---
-        if not self._wait_for(1, 150):
-            return None, None
+        # 3. Wait for DHT11 ACK: pin pulled LOW by sensor (~80us)
+        count = 0
+        while read_pin():
+            count += 1
+            if count > 30000:
+                return None, None
 
-        # --- End of ACK HIGH ---
-        if not self._wait_for(0, 150):
-            return None, None
+        # 4. Wait for DHT11 ACK: pin pulled HIGH by sensor (~80us)
+        count = 0
+        while not read_pin():
+            count += 1
+            if count > 30000:
+                return None, None
 
-        # --- Read 40 bits ---
-        bits = []
+        # 5. Wait for DHT11 ACK finish: pin goes LOW before bit 0
+        count = 0
+        while read_pin():
+            count += 1
+            if count > 30000:
+                return None, None
+
+        # 6. Sample 40 bits (each bit = 50us LOW + variable HIGH)
+        pulse_lengths = []
         for _ in range(40):
-            # Rising edge: start of HIGH pulse
-            if not self._wait_for(1, 100):
-                return None, None
-            t_start = time.monotonic()
+            # Wait while pin is LOW (bit start)
+            count = 0
+            while not read_pin():
+                count += 1
+                if count > 30000:
+                    return None, None
 
-            # Falling edge: end of HIGH pulse
-            if not self._wait_for(0, 150):
-                return None, None
-            pulse_us = (time.monotonic() - t_start) * 1_000_000
+            # Measure duration of HIGH pulse
+            high_cycles = 0
+            while read_pin():
+                high_cycles += 1
+                if high_cycles > 30000:
+                    return None, None
 
-            bits.append(1 if pulse_us >= 40 else 0)
+            pulse_lengths.append(high_cycles)
 
-        # --- Decode 5 bytes ---
-        raw = []
-        for b in range(5):
-            v = 0
-            for i in range(8):
-                v = (v << 1) | bits[b * 8 + i]
-            raw.append(v)
+        if len(pulse_lengths) != 40:
+            return None, None
 
-        # --- Verify checksum ---
-        if (raw[0] + raw[1] + raw[2] + raw[3]) & 0xFF != raw[4]:
+        # 7. Dynamic threshold: '0' is ~28us, '1' is ~70us
+        p_min = min(pulse_lengths)
+        p_max = max(pulse_lengths)
+        if p_max <= p_min:
+            return None, None
+        threshold = (p_min + p_max) / 2.0
+
+        bits = [1 if p > threshold else 0 for p in pulse_lengths]
+
+        # 8. Decode 5 bytes
+        raw = [0, 0, 0, 0, 0]
+        for i in range(40):
+            raw[i // 8] = (raw[i // 8] << 1) | bits[i]
+
+        # 9. Verify checksum: byte 4 == (byte0 + byte1 + byte2 + byte3) & 0xFF
+        calc_checksum = (raw[0] + raw[1] + raw[2] + raw[3]) & 0xFF
+        if calc_checksum != raw[4]:
             return None, None
 
         hum  = raw[0] + raw[1] * 0.1
         temp = raw[2] + raw[3] * 0.1
 
-        if not (0 <= temp <= 60) or not (0 <= hum <= 100):
+        if not (0.0 <= temp <= 70.0 and 0.0 <= hum <= 100.0):
             return None, None
 
         return round(temp, 1), round(hum, 1)
 
     def read(self):
-        """Read with retries. Returns cached value on failure."""
+        """Read DHT11 with retries. Caches and returns last valid reading."""
         for attempt in range(self.MAX_ATTEMPTS):
             try:
                 temp, hum = self._read_raw()
-                if temp is not None:
+                if temp is not None and hum is not None:
                     self._last_temp, self._last_hum = temp, hum
+                    if not self._first_ok:
+                        self._first_ok = True
+                        print(f"\n[DHT11] VALID HARDWARE DATA: Temperature={temp}C, Humidity={hum}%\n")
                     return temp, hum
             except Exception:
                 pass
             if attempt < self.MAX_ATTEMPTS - 1:
-                time.sleep(0.05)
+                time.sleep(0.04)
         return self._last_temp, self._last_hum
 
 
@@ -582,11 +608,15 @@ def thread_mq135():
     print(f"[THREAD] MQ135  GPIO{PIN_MQ135}  @ 2 Hz  (Gas Alert, Active LOW)")
     prev = False
     while True:
-        alert = gpio.input(PIN_MQ135) == 0   # LOW = gas above threshold
+        pin_val = gpio.input(PIN_MQ135)
+        alert   = (pin_val == 0)   # Active LOW: 0 = gas/smoke threshold exceeded
         with _lock:
             _state["gas_detected"] = alert
             if alert and not prev:
                 _state["gas_alert_count"] += 1
+                print(f"\n[MQ135] >>> GAS/SMOKE ALERT TRIGGERED! GPIO{PIN_MQ135} went LOW <<< \n")
+            elif not alert and prev:
+                print(f"\n[MQ135] --- Air quality cleared (GPIO{PIN_MQ135} returned HIGH) --- \n")
         prev = alert
         time.sleep(MQ135_INTERVAL_SEC)
 
