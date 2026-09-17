@@ -39,7 +39,7 @@ IR_INTERVAL_SEC     = 0.02  # 50 Hz polling for vehicle edge detection
 MQ135_INTERVAL_SEC  = 0.5   # 2 Hz gas alert check
 UDP_INTERVAL_SEC    = 0.05  # 20 Hz UDP telemetry stream
 
-HOST_PC_IP = sys.argv[1] if len(sys.argv) > 1 else "10.12.2.121"
+HOST_PC_IP = sys.argv[1] if len(sys.argv) > 1 else "10.12.2.208"
 UDP_PORT   = int(sys.argv[2]) if len(sys.argv) > 2 else 9999
 
 # ==============================================================================
@@ -113,12 +113,22 @@ class BCM2711GPIO:
             self._available = True
             print("[GPIO] /dev/mem BCM2711 GPIO mapped successfully at 0xFE200000")
         except PermissionError:
-            print("[GPIO] ERROR: /dev/mem requires root. Run: sudo python3 pi_sensor_reader.py")
-            print("[GPIO] Falling back to simulation mode.")
+            print()
+            print("[GPIO] =====================================================")
+            print("[GPIO] ERROR: /dev/mem access DENIED — not running as root.")
+            print("[GPIO]")
+            print("[GPIO] Fix: re-run with:")
+            print("[GPIO]   sudo python3 pi_sensor_reader.py")
+            print("[GPIO] =====================================================")
+            print()
+            sys.exit(1)   # Hard exit — do not silently simulate
         except FileNotFoundError:
-            print("[GPIO] /dev/mem not found — running in simulation mode.")
+            print("[GPIO] ERROR: /dev/mem not found. Are you on the Pi?")
+            sys.exit(1)
         except Exception as e:
-            print(f"[GPIO] mmap failed ({e}) — running in simulation mode.")
+            print(f"[GPIO] ERROR: mmap failed ({e})")
+            print("[GPIO] Try: sudo python3 pi_sensor_reader.py")
+            sys.exit(1)
 
     def _reg_read(self, offset):
         """Read a 32-bit GPIO register at byte offset."""
@@ -479,9 +489,8 @@ def thread_mq135():
 
 # Simulation helper for IR when no hardware
 def _sim_ir():
-    """Simulates vehicle pulses: ~1 vehicle every 2.3 seconds."""
-    t = time.monotonic()
-    return 0 if (int(t * 3) % 7) == 0 else 1
+    """Simulation-mode IR: always returns 1 (beam clear). No fake vehicles."""
+    return 1   # Beam always clear in simulation — count only real hardware edges
 
 
 # ==============================================================================
