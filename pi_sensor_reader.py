@@ -42,6 +42,71 @@ UDP_INTERVAL_SEC    = 0.05   # 20 Hz — UDP telemetry stream
 
 HOST_PC_IP = sys.argv[1] if len(sys.argv) > 1 else "10.12.2.208"
 UDP_PORT   = int(sys.argv[2]) if len(sys.argv) > 2 else 9999
+MQTT_PORT  = 1883
+
+# ==============================================================================
+#  Pure Python Zero-Dependency MQTT 3.1.1 Publisher for QNX Neutrino RTOS
+# ==============================================================================
+class MiniMQTTClient:
+    def __init__(self, host, port=1883, client_id="QNX_Pi_Publisher"):
+        self.host = host
+        self.port = port
+        self.cid = client_id.encode('utf-8')
+        self.sock = None
+        self.connected = False
+        self.lock = threading.Lock()
+
+    def connect(self):
+        try:
+            if self.sock:
+                try: self.sock.close()
+                except Exception: pass
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(1.5)
+            self.sock.connect((self.host, self.port))
+            # MQTT 3.1.1 CONNECT variable header: Protocol Name 'MQTT', Level 4, Clean Session (0x02), Keepalive 60s
+            vh = b'\x00\x04MQTT\x04\x02\x00\x3c'
+            payload = bytes([len(self.cid) >> 8, len(self.cid) & 0xff]) + self.cid
+            body = vh + payload
+            rem = self._encode_len(len(body))
+            self.sock.sendall(b'\x10' + rem + body)
+            ack = self.sock.recv(4)
+            if len(ack) >= 4 and ack[0] == 0x20 and ack[1] == 0x02 and ack[3] == 0x00:
+                self.connected = True
+                return True
+        except Exception:
+            self.connected = False
+        return False
+
+    def _encode_len(self, length):
+        encoded = bytearray()
+        while True:
+            digit = length % 128
+            length //= 128
+            if length > 0:
+                digit |= 128
+            encoded.append(digit)
+            if length <= 0:
+                break
+        return bytes(encoded)
+
+    def publish(self, topic, msg):
+        with self.lock:
+            if not self.connected:
+                if not self.connect():
+                    return False
+            try:
+                tb = topic.encode('utf-8')
+                mb = msg.encode('utf-8') if isinstance(msg, str) else msg
+                body = bytes([len(tb) >> 8, len(tb) & 0xff]) + tb + mb
+                rem = self._encode_len(len(body))
+                self.sock.sendall(b'\x30' + rem + body)
+                return True
+            except Exception:
+                self.connected = False
+                try: self.sock.close()
+                except Exception: pass
+                return False
 
 # ==============================================================================
 #  BCM2711 Physical Register Map (Raspberry Pi 4)
@@ -961,11 +1026,13 @@ def thread_p2_fault_monitor():
 # ==============================================================================
 
 def thread_p1_twin_synchronizer(sock):
-    """Priority 1 Task: Hard Real-Time Snapshot Synchronizer & UDP Publisher (20 Hz, 50ms)"""
+    """Priority 1 Task: Hard Real-Time Snapshot Synchronizer & Dual UDP/MQTT Publisher (20 Hz, 50ms)"""
     set_qnx_thread_priority(task_metrics["p1_synchronizer"].priority)
     print(f"[P1 Synchronizer]Twin Engine    | Rate: 20 Hz | Deadline: 15.0ms | QNX Priority: 250 (HIGHEST)")
+    print(f"[P1 Synchronizer]Dual Channels  | UDP: {HOST_PC_IP}:{UDP_PORT} | MQTT: {HOST_PC_IP}:{MQTT_PORT}")
 
     metric = task_metrics["p1_synchronizer"]
+    mqtt_client = MiniMQTTClient(host=HOST_PC_IP, port=MQTT_PORT, client_id="QNX_Pi_Synchronizer")
 
     while True:
         t_start = metric.begin_tick()
@@ -1064,16 +1131,20 @@ def thread_p1_twin_synchronizer(sock):
             }
         ]
 
-        # 3. Transmit via UDP to Host PC
+        # 3. Transmit via Dual Stream: UDP (Port 9999) + MQTT (Port 1883)
         for p in packets:
             try:
                 raw = json.dumps(p).encode('utf-8')
+                # Channel A: UDP Datagram
                 sock.sendto(raw, (HOST_PC_IP, UDP_PORT))
+                # Channel B: MQTT Pub/Sub
+                mqtt_client.publish(f"qnx/city/{p['stream']}", raw)
             except Exception:
                 pass
 
         metric.end_tick(t_start)
         time.sleep(metric.period_s)
+
 
 
 # ==============================================================================

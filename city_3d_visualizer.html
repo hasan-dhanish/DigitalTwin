@@ -598,6 +598,9 @@
       <div class="status-item">
         <span>JITTER: <strong id="sys-jitter-text">0.0 ms</strong></span>
       </div>
+      <div class="status-item">
+        <span>LINK: <strong id="sys-protocol-text" style="color: var(--cyan-accent);">UDP 9999 + MQTT 1883</strong></span>
+      </div>
     </div>
 
     <div class="header-controls">
@@ -1410,6 +1413,11 @@
         const jitEl = document.getElementById('sys-jitter-text');
         if (jitEl && data.jitter_ms !== undefined) {
           jitEl.textContent = `${Number(data.jitter_ms).toFixed(2)} ms`;
+        }
+
+        const protoEl = document.getElementById('sys-protocol-text');
+        if (protoEl && data.protocol) {
+          protoEl.textContent = data.protocol;
         }
 
         const statEl = document.getElementById('sys-status-text');

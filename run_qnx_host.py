@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # ==============================================================================
 # Host PC Digital Twin Dashboard & Gateway for QNX RTOS Engine
-# Receives TCP snapshots (Port 8080) and UDP telemetry streams (Port 9999)
-# and hosts the 2D City Digital Twin Dashboard on HTTP Port 8080.
+# Protocols Supported:
+#   1. UDP Receiver (Port 9999) - Ultra-low latency <1ms
+#   2. MQTT Broker & Subscriber (Port 1883) - Industrial IoT Pub/Sub
+#   3. HTTP REST & Web Dashboard (Port 8080) - 2D & 3D WebGL Digital Twin
 # ==============================================================================
 
 import socket
@@ -14,9 +16,12 @@ import os
 import http.server
 import socketserver
 
+from src.micro_mqtt_broker import MicroMQTTBroker
+
 QNX_PI_IP = "127.0.0.1"
 QNX_TCP_PORT = 8080
 UDP_PORT = 9999
+MQTT_PORT = 1883
 HTTP_PORT = 8080
 
 if len(sys.argv) > 1:
@@ -25,6 +30,7 @@ if len(sys.argv) > 1:
 # Global state cached from QNX Engine
 g_telemetry = {
     "system_state": "NORMAL [OPTIMAL]",
+    "protocol": "UDP + MQTT",
     "sync_latency_ms": 0.08,
     "max_latency_ms": 1.2,
     "deadline_misses": 0,
@@ -68,7 +74,7 @@ def udp_receiver():
                     g_telemetry["streams"]["traffic"]["val"]           = float(val)
                     g_telemetry["streams"]["traffic"]["vehicle_count"] = payload.get("vehicle_count", 0)
                     g_telemetry["streams"]["traffic"]["beam_blocked"]  = payload.get("beam_blocked", False)
-                    g_telemetry["streams"]["traffic"]["freshness_ms"]  = payload.get("freshness_ms", 5.0)
+                    g_telemetry["streams"]["traffic"]["freshness_ms"]  = payload.get("freshness_ms", 10.0)
                     g_telemetry["streams"]["traffic"]["stale"]         = payload.get("stale", False)
 
             elif sid == "air":
@@ -128,7 +134,71 @@ def udp_receiver():
             pass
 
 # ------------------------------------------------------------------------------
-# 2. QNX TCP Polling Client Thread (Port 8080)
+# 2. MQTT Subscriber Thread (Port 1883)
+# ------------------------------------------------------------------------------
+def mqtt_subscriber():
+    global g_telemetry
+    time.sleep(0.5)  # Wait for broker to initialize
+    try:
+        import paho.mqtt.client as mqtt
+        
+        def on_connect(client, userdata, flags, rc, properties=None):
+            print("[MQTT SUBSCRIBER] Connected to Local MQTT Broker on port 1883!")
+            client.subscribe("qnx/city/#")
+            client.subscribe("digitaltwin/#")
+
+        def on_message(client, userdata, msg):
+            try:
+                topic = msg.topic
+                payload = json.loads(msg.payload.decode('utf-8'))
+                g_telemetry["protocol"] = "MQTT + UDP"
+
+                sid = payload.get("stream")
+                if sid == "traffic" or "traffic" in topic:
+                    if "value" in payload:
+                        g_telemetry["streams"]["traffic"]["val"] = float(payload["value"])
+                    if "vehicle_count" in payload:
+                        g_telemetry["streams"]["traffic"]["vehicle_count"] = payload["vehicle_count"]
+                    if "beam_blocked" in payload:
+                        g_telemetry["streams"]["traffic"]["beam_blocked"] = payload["beam_blocked"]
+
+                elif sid == "air" or "air" in topic:
+                    if "value" in payload:
+                        g_telemetry["streams"]["air"]["val"] = float(payload["value"])
+                    if "gas_alert" in payload:
+                        g_telemetry["streams"]["air"]["gas_alert"] = payload["gas_alert"]
+
+                elif sid == "environment" or "environment" in topic:
+                    if "temperature" in payload:
+                        g_telemetry["streams"]["environment"]["temperature"] = float(payload["temperature"])
+                    if "humidity" in payload:
+                        g_telemetry["streams"]["environment"]["humidity"] = float(payload["humidity"])
+
+                elif sid == "qnx_telemetry" or "telemetry" in topic:
+                    if "system_state" in payload:
+                        g_telemetry["system_state"] = payload["system_state"]
+                    if "sync_latency_ms" in payload:
+                        g_telemetry["sync_latency_ms"] = float(payload["sync_latency_ms"])
+                    if "deadline_misses" in payload:
+                        g_telemetry["deadline_misses"] = int(payload["deadline_misses"])
+            except Exception:
+                pass
+
+        if hasattr(mqtt, 'CallbackAPIVersion'):
+            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="Host_PC_Twin_Subscriber")
+        else:
+            client = mqtt.Client(client_id="Host_PC_Twin_Subscriber")
+
+        client.on_connect = on_connect
+        client.on_message = on_message
+        client.connect("127.0.0.1", MQTT_PORT, 60)
+        client.loop_forever()
+
+    except Exception as e:
+        print(f"[MQTT NOTICE] Subscriber initialization exception: {e}")
+
+# ------------------------------------------------------------------------------
+# 3. QNX TCP Polling Client Thread (Port 8080 Fallback)
 # ------------------------------------------------------------------------------
 def qnx_tcp_poller():
     global g_telemetry
@@ -154,7 +224,7 @@ def qnx_tcp_poller():
         time.sleep(0.05)
 
 # ------------------------------------------------------------------------------
-# 3. Web Server Request Handler (With Socket Error Protection)
+# 4. Web Server Request Handler (With Socket Error Protection)
 # ------------------------------------------------------------------------------
 class HostDashboardHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -195,19 +265,31 @@ class HostDashboardHandler(http.server.SimpleHTTPRequestHandler):
 
 def main():
     print("==========================================================================")
-    print("  QNX REAL-TIME CITY DIGITAL TWIN HOST PC DASHBOARD SERVER")
+    print("  QNX REAL-TIME CITY DIGITAL TWIN HOST PC GATEWAY")
     print("==========================================================================")
     print(f" Target QNX Pi Address : TCP {QNX_PI_IP}:{QNX_TCP_PORT}")
-    print(f" UDP Listener Active   : UDP 0.0.0.0:{UDP_PORT}")
-    print(f" Web Dashboard Active  : http://localhost:{HTTP_PORT}/city_digital_twin_dashboard.html")
+    print(f" UDP Telemetry Port    : UDP 0.0.0.0:{UDP_PORT}")
+    print(f" MQTT Broker Port      : MQTT 0.0.0.0:{MQTT_PORT}")
+    print(f" Web 3D Twin Active    : http://localhost:{HTTP_PORT}/city_3d_visualizer.html")
     print("==========================================================================")
 
+    # 1. Start Embedded Micro MQTT Broker
+    broker = MicroMQTTBroker(host="0.0.0.0", port=MQTT_PORT)
+    broker.start(daemon=True)
+
+    # 2. Start MQTT Subscriber Thread
+    threading.Thread(target=mqtt_subscriber, daemon=True).start()
+
+    # 3. Start UDP Receiver Thread
     threading.Thread(target=udp_receiver, daemon=True).start()
+
+    # 4. Start QNX TCP Poller Thread
     threading.Thread(target=qnx_tcp_poller, daemon=True).start()
 
+    # 5. Start HTTP Server for 3D Visualizer & API
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", HTTP_PORT), HostDashboardHandler) as httpd:
-        print("\n[STREAMING] Serving Digital Twin Dashboard...")
+        print("\n[STREAMING] Serving Digital Twin on http://localhost:8080...")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
