@@ -768,13 +768,16 @@ class AtomicSensorState:
                 self.traffic_raw["total_vehicles"] += 1
                 self.traffic_raw["event_times"].append(now)
                 self.traffic_raw["last_event_time"] = now
+                self.traffic_raw["new_pass_pulse"] = True
                 if transit_ms > 0:
                     self.traffic_raw["last_transit_ms"] = transit_ms
                 if calculated_speed is not None:
                     self.traffic_raw["last_speed_kmh"] = calculated_speed
                     self.traffic_raw["raw_phys_kmh"]   = raw_phys_kmh or calculated_speed
-                    # Immediately propagate the calculated speed to analytics
                     self.analytics["traffic_speed"]     = calculated_speed
+            elif not blocked:
+                self.traffic_raw["new_pass_pulse"] = False
+                self.analytics["traffic_speed"] = 0.0
 
     def update_air_raw(self, alert, is_new=False):
         with self._lock:
@@ -834,12 +837,19 @@ class AtomicSensorState:
     # P1 Twin Synchronizer Reader (Atomic Consistent Snapshot)
     def get_consistent_snapshot(self):
         with self._lock:
-            now_mono = time.monotonic()
-            last_ev = self.traffic_raw.get("last_event_time", 0.0)
-            # Active transit display window: 3.0 seconds after a vehicle pass
-            is_active_vehicle = (now_mono - last_ev) <= 3.0
-            live_speed = self.analytics["traffic_speed"] if is_active_vehicle else 0.0
-            live_transit = self.traffic_raw.get("last_transit_ms", 0.0) if is_active_vehicle else 0.0
+            blocked = self.traffic_raw["beam_blocked"]
+            has_pulse = self.traffic_raw.get("new_pass_pulse", False)
+
+            # Instantaneous real-time QNX behavior (ZERO artificial delay):
+            # Speed is emitted only while beam is interrupted or on the exact exit pulse tick.
+            # When beam is clear: STRICTLY 0.0 km/h!
+            if blocked or has_pulse:
+                live_speed = self.traffic_raw.get("last_speed_kmh", 0.0)
+                live_transit = self.traffic_raw.get("last_transit_ms", 0.0)
+                self.traffic_raw["new_pass_pulse"] = False  # Clear single-tick pulse immediately
+            else:
+                live_speed = 0.0
+                live_transit = 0.0
 
             snap = {
                 "seq": self.seq_id,
@@ -851,9 +861,10 @@ class AtomicSensorState:
                     "val": live_speed,
                     "unit": "km/h",
                     "vehicle_count": self.traffic_raw["total_vehicles"],
-                    "beam_blocked": self.traffic_raw["beam_blocked"],
+                    "beam_blocked": blocked,
                     "transit_time_ms": live_transit,
-                    "raw_phys_kmh": self.traffic_raw.get("raw_phys_kmh", 0.0) if is_active_vehicle else 0.0,
+                    "last_vehicle_speed": self.traffic_raw.get("last_speed_kmh", 0.0),
+                    "raw_phys_kmh": self.traffic_raw.get("raw_phys_kmh", 0.0) if (blocked or has_pulse) else 0.0,
                     "vehicle_length_cm": self.traffic_raw.get("vehicle_length_cm", 6.0),
                     "density_pct": self.analytics.get("density_pct", 0.0),
                     "density_level": self.analytics.get("density_level", "FREE FLOW"),
@@ -1072,13 +1083,8 @@ def thread_p4_analytics():
             # Active obstacle/standstill queue detected at sensor gate
             speed = max(0.0, round(sensor_state.analytics.get("traffic_speed", 25.0) * 0.4, 1))
             density_pct = min(100.0, 84.0 + (recent_count * 2.0))
-        elif recent_count > 0 and (now - last_event_t) <= 4.0 and last_speed > 0:
-            # When a vehicle was detected within the last 4 seconds: display its measured speed
-            speed = last_speed
-            density_pct = round(min(100.0, max(5.0, (vpm / 22.0) * 55.0 + (recent_count * 1.2))), 1)
         else:
-            # When NO vehicle is detected (idle road, count 0, or no crossing in > 4s):
-            # Speed stays strictly at 0.0 km/h!
+            # Pure real-time QNX: beam is clear -> instantaneous speed is strictly 0.0 km/h!
             speed = 0.0
             density_pct = round(min(100.0, (vpm / 22.0) * 40.0), 1) if recent_count > 0 else 0.0
 

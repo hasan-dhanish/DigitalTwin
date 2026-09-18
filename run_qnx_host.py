@@ -86,6 +86,7 @@ def udp_receiver():
                     g_telemetry["streams"]["traffic"]["vehicle_count"] = payload.get("vehicle_count", 0)
                     g_telemetry["streams"]["traffic"]["beam_blocked"]  = payload.get("beam_blocked", False)
                     g_telemetry["streams"]["traffic"]["transit_time_ms"] = float(payload.get("transit_time_ms", 0.0))
+                    g_telemetry["streams"]["traffic"]["last_speed"]    = float(payload.get("last_vehicle_speed", payload.get("last_speed", 0.0)))
                     g_telemetry["streams"]["traffic"]["density_pct"]   = float(payload.get("density_pct", payload.get("congestion_pct", 24.0)))
                     g_telemetry["streams"]["traffic"]["density_level"] = payload.get("density_level", payload.get("congestion_level", "FREE FLOW"))
                     dpct = g_telemetry["streams"]["traffic"]["density_pct"]
