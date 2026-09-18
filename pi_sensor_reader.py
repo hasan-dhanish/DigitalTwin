@@ -757,6 +757,28 @@ class AtomicSensorState:
             "env_stale": False,
         }
 
+        # System Hardware Metrics (P2 Output)
+        self.system_metrics = {
+            "cpu_pct": 0.0,
+            "cores_pct": {"0": 0.0, "1": 0.0, "2": 0.0, "3": 0.0},
+            "ram_pct": 0.0,
+            "ram_used_mb": 0.0,
+            "ram_total_mb": 3894.0,
+            "temp_c": 0.0,
+            "freq_mhz": 1500
+        }
+
+    def update_system_metrics(self, cpu_pct, cores_pct, ram_pct, ram_used_mb, ram_total_mb, temp_c, freq_mhz):
+        with self._lock:
+            self.seq_id += 1
+            self.system_metrics["cpu_pct"] = cpu_pct
+            self.system_metrics["cores_pct"] = cores_pct
+            self.system_metrics["ram_pct"] = ram_pct
+            self.system_metrics["ram_used_mb"] = ram_used_mb
+            self.system_metrics["ram_total_mb"] = ram_total_mb
+            self.system_metrics["temp_c"] = temp_c
+            self.system_metrics["freq_mhz"] = freq_mhz
+
     # P3 Data Acquisition Writers
     def update_traffic_raw(self, blocked, new_event=False, transit_ms=0.0, calculated_speed=None, raw_phys_kmh=None):
         with self._lock:
@@ -898,7 +920,8 @@ class AtomicSensorState:
                     "unit": "MW",
                     "freshness_ms": 12.0,
                     "stale": False
-                }
+                },
+                "system": dict(self.system_metrics)
             }
             return snap
 
@@ -1142,6 +1165,101 @@ def thread_p4_analytics():
 #  Purpose: Detect stale data, missed deadlines, and system faults quickly
 # ==============================================================================
 
+_last_cpu_ticks = {}
+
+def sample_pi_hardware_metrics():
+    global _last_cpu_ticks
+    cpu_overall = 0.0
+    cores = {}
+    ram_pct = 0.0
+    ram_used = 0.0
+    ram_total = 3894.0
+    temp_c = 0.0
+    freq_mhz = 1500
+
+    # 1. CPU from /proc/stat
+    if os.path.exists("/proc/stat"):
+        try:
+            with open("/proc/stat", "r") as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if not parts:
+                        continue
+                    tag = parts[0]
+                    if tag.startswith("cpu"):
+                        fields = [float(x) for x in parts[1:8]]
+                        idle = fields[3] + fields[4]
+                        total = sum(fields)
+                        if tag in _last_cpu_ticks:
+                            prev_t, prev_i = _last_cpu_ticks[tag]
+                            dt = total - prev_t
+                            di = idle - prev_i
+                            pct = max(0.0, min(100.0, ((dt - di) / max(1.0, dt)) * 100.0))
+                        else:
+                            pct = 0.0
+                        _last_cpu_ticks[tag] = (total, idle)
+                        if tag == "cpu":
+                            cpu_overall = round(pct, 1)
+                        else:
+                            cid = tag.replace("cpu", "")
+                            if cid.isdigit():
+                                cores[cid] = round(pct, 1)
+        except Exception:
+            pass
+
+    # Fallback if non-procfs (e.g. QNX /proc missing or standard POSIX times)
+    if cpu_overall == 0.0 and not cores:
+        try:
+            t = os.times()
+            now = time.monotonic()
+            if hasattr(sample_pi_hardware_metrics, "_prev_t"):
+                prev_t, prev_now = sample_pi_hardware_metrics._prev_t
+                dt = now - prev_now
+                du = (t.user + t.system) - (prev_t.user + prev_t.system)
+                n = os.cpu_count() or 4
+                if dt > 0:
+                    cpu_overall = round(max(1.0, min(100.0, (du / (dt * n)) * 100.0)), 1)
+            sample_pi_hardware_metrics._prev_t = (t, now)
+        except Exception:
+            pass
+
+    # 2. RAM from /proc/meminfo
+    if os.path.exists("/proc/meminfo"):
+        try:
+            mem = {}
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    parts = line.split(":")
+                    if len(parts) == 2:
+                        mem[parts[0].strip()] = float(parts[1].strip().split()[0]) / 1024.0
+            ram_total = round(mem.get("MemTotal", 3894.0), 1)
+            avail = mem.get("MemAvailable", mem.get("MemFree", 2000.0))
+            ram_used = round(max(0.0, ram_total - avail), 1)
+            ram_pct = round((ram_used / max(1.0, ram_total)) * 100.0, 1)
+        except Exception:
+            pass
+
+    # 3. SoC Temperature
+    for t_path in ["/sys/class/thermal/thermal_zone0/temp", "/sys/devices/virtual/thermal/thermal_zone0/temp"]:
+        if os.path.exists(t_path):
+            try:
+                with open(t_path, "r") as f:
+                    temp_c = round(float(f.read().strip()) / 1000.0, 1)
+                break
+            except Exception:
+                pass
+
+    # 4. CPU Frequency
+    f_path = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"
+    if os.path.exists(f_path):
+        try:
+            with open(f_path, "r") as f:
+                freq_mhz = int(int(f.read().strip()) / 1000)
+        except Exception:
+            pass
+
+    return cpu_overall, cores, ram_pct, ram_used, ram_total, temp_c, freq_mhz
+
 def thread_p2_fault_monitor():
     """Priority 2 Task: Safety Watchdog & Deadline Compliance Monitor (20 Hz, 50ms, Core 1)"""
     metric = task_metrics["p2_fault_monitor"]
@@ -1149,10 +1267,17 @@ def thread_p2_fault_monitor():
     set_qnx_thread_affinity(metric.core_mask)
     print(f"[P2 Monitor]     Fault Watchdog | Rate: 20 Hz | Deadline: 5.0ms  | Prio: 200 | {metric.core_name}")
 
+    hw_tick = 0
 
     while True:
         t_start = metric.begin_tick()
         now = time.time()
+        hw_tick += 1
+
+        # Periodically sample physical hardware CPU & RAM metrics (every 10 ticks = 0.5s)
+        if hw_tick % 10 == 0:
+            c_all, c_cores, r_pct, r_used, r_total, t_c, f_mhz = sample_pi_hardware_metrics()
+            sensor_state.update_system_metrics(c_all, c_cores, r_pct, r_used, r_total, t_c, f_mhz)
 
         with sensor_state._lock:
             t_ts = sensor_state.traffic_raw["timestamp"]
@@ -1263,6 +1388,19 @@ def thread_p1_twin_synchronizer(sock):
                 "ts": ts
             },
 
+            # System Metrics Stream (Live Pi Hardware CPU / RAM / Temp)
+            {
+                "stream": "system",
+                "cpu_pct": snap["system"]["cpu_pct"],
+                "cores_pct": snap["system"]["cores_pct"],
+                "ram_pct": snap["system"]["ram_pct"],
+                "ram_used_mb": snap["system"]["ram_used_mb"],
+                "ram_total_mb": snap["system"]["ram_total_mb"],
+                "temp_c": snap["system"]["temp_c"],
+                "freq_mhz": snap["system"]["freq_mhz"],
+                "ts": ts
+            },
+
             # Complete Synchronized QNX Telemetry
             {
                 "stream": "qnx_telemetry",
@@ -1346,9 +1484,11 @@ def thread_console_hud():
         speed_val  = snap["traffic"]["val"]
         speed_str  = f"{speed_val:4.1f}km/h" if speed_val > 0 else " 0.0km/h"
         transit_str = f"{transit_ms:3.0f}ms" if transit_ms > 0 else "  0ms"
+        cpu_val = snap.get("system", {}).get("cpu_pct", 0.0)
         sys.stdout.write(
             f"\r[P1:{sync_metric.priority}|{snap['system_state'][:14]}] "
             f"Vehicles:{snap['traffic']['vehicle_count']:3d} ({speed_str} | {transit_str}) | "
+            f"CPU:{cpu_val:4.1f}% | "
             f"Air:{snap['air']['val']:3.0f}AQI [{air_status}] | "
             f"DHT:{t_s},{h_s} | "
             f"SyncLat:{sync_metric.exec_time_ms:4.2f}ms Misses:{total_misses} "

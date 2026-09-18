@@ -186,17 +186,34 @@ def main():
     
     try:
         while True:
-            overall_cpu, cores_cpu = sampler.sample_cpu()
-            mem_used, mem_total, mem_pct = sampler.sample_memory()
-            temp_c = sampler.sample_temperature()
-            freq_mhz = sampler.sample_cpu_freq_mhz()
             telemetry = fetch_live_telemetry(host=host_ip)
+            pi_sys = telemetry.get("streams", {}).get("system", {}) if telemetry else {}
+            
+            if pi_sys and (pi_sys.get("cpu_pct", 0) > 0 or pi_sys.get("ram_pct", 0) > 0 or pi_sys.get("temp_c", 0) > 0):
+                # 100% Real Live Hardware Metrics streamed directly from the Pi over network!
+                overall_cpu = float(pi_sys.get("cpu_pct", 0.0))
+                raw_cores = pi_sys.get("cores_pct", {})
+                cores_cpu = {int(k): float(v) for k, v in raw_cores.items()} if raw_cores else {}
+                mem_used = float(pi_sys.get("ram_used_mb", 0.0))
+                mem_total = float(pi_sys.get("ram_total_mb", 3894.0))
+                mem_pct = float(pi_sys.get("ram_pct", 0.0))
+                temp_c = float(pi_sys.get("temp_c", 0.0))
+                freq_mhz = int(pi_sys.get("freq_mhz", 1500))
+                data_source = f"LIVE PI HARDWARE STREAM ({host_ip}:8080)"
+            else:
+                # Local sampler (when running directly on the Pi)
+                overall_cpu, cores_cpu = sampler.sample_cpu()
+                mem_used, mem_total, mem_pct = sampler.sample_memory()
+                temp_c = sampler.sample_temperature()
+                freq_mhz = sampler.sample_cpu_freq_mhz()
+                data_source = "LOCAL PI KERNEL PROCFS" if sampler.has_proc_stat else "LOCAL POSIX SAMPLER"
 
             # Build Header
             clear_screen()
             now_str = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
             print(f"{BOLD}{BG_DARK}{CYAN}  BLACKBERRY QNX NEUTRINO RTOS v7.1 - HARD REAL-TIME CPU & THREAD MONITOR  {RESET}")
             print(f"{DIM}Target: Raspberry Pi 4 Model B (Quad Core Cortex-A72 @ {freq_mhz}MHz) | SoC Temp: {temp_c}°C | {now_str}{RESET}")
+            print(f"{DIM}Data Source: {GREEN}{data_source}{RESET}")
             print(f"{GRAY}{'═'*80}{RESET}")
 
             # Overall System Meters

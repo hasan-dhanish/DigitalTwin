@@ -54,7 +54,18 @@ g_telemetry = {
         "power":   {"val": 410.0, "unit": "MW",   "freshness_ms": 18.1, "stale": False},
         "water":   {"val": 65.0,  "unit": "PSI",  "freshness_ms": 22.5, "stale": False},
         "air":     {"val": 28.0,  "unit": "AQI",  "gas_alert": False, "alert_count": 0, "freshness_ms": 45.0, "stale": False},
-        "environment": {"temperature": 24.5, "humidity": 55.0, "dht_ok": True, "freshness_ms": 50.0, "stale": False}
+        "environment": {"temperature": 24.5, "humidity": 55.0, "dht_ok": True, "freshness_ms": 50.0, "stale": False},
+        "system": {
+            "cpu_pct": 0.0,
+            "cores_pct": {"0": 0.0, "1": 0.0, "2": 0.0, "3": 0.0},
+            "ram_pct": 0.0,
+            "ram_used_mb": 0.0,
+            "ram_total_mb": 3894.0,
+            "temp_c": 0.0,
+            "freq_mhz": 1500,
+            "freshness_ms": 10.0,
+            "stale": False
+        }
     }
 }
 
@@ -125,9 +136,21 @@ def udp_receiver():
                 g_telemetry["max_latency_ms"]  = float(payload.get("max_latency_ms", 1.2))
                 g_telemetry["deadline_misses"] = int(payload.get("deadline_misses", 0))
                 g_telemetry["jitter_ms"]       = float(payload.get("jitter_ms", 0.0))
-                g_telemetry["total_ticks"]     = int(payload.get("total_ticks", 0))
                 g_telemetry["stale_count"]     = int(payload.get("stale_count", 0))
                 g_telemetry["watchdog"]        = payload.get("watchdog", "HEALTHY")
+
+            elif sid == "system":
+                g_telemetry["streams"]["system"] = {
+                    "cpu_pct": float(payload.get("cpu_pct", 0.0)),
+                    "cores_pct": payload.get("cores_pct", {}),
+                    "ram_pct": float(payload.get("ram_pct", 0.0)),
+                    "ram_used_mb": float(payload.get("ram_used_mb", 0.0)),
+                    "ram_total_mb": float(payload.get("ram_total_mb", 3894.0)),
+                    "temp_c": float(payload.get("temp_c", 0.0)),
+                    "freq_mhz": int(payload.get("freq_mhz", 1500)),
+                    "freshness_ms": 10.0,
+                    "stale": False
+                }
 
             # Live CLI Feedback every 10 packets (~0.5s)
             if pkt_count % 10 == 0:
