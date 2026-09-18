@@ -9,31 +9,38 @@
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-color: #0b111e;
-      --panel-bg: rgba(15, 23, 42, 0.88);
-      --panel-border: rgba(255, 255, 255, 0.12);
+      --bg-color: #070b12;
+      --panel-bg: rgba(12, 18, 32, 0.76);
+      --panel-border: rgba(255, 255, 255, 0.09);
+      --panel-border-hover: rgba(6, 182, 212, 0.35);
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.06);
       --red-primary: #ef4444;
-      --red-glow: rgba(239, 68, 68, 0.4);
+      --red-glow: rgba(239, 68, 68, 0.35);
       --cyan-accent: #06b6d4;
-      --cyan-glow: rgba(6, 182, 212, 0.4);
+      --cyan-glow: rgba(6, 182, 212, 0.35);
       --green-accent: #10b981;
-      --green-glow: rgba(16, 185, 129, 0.4);
+      --green-glow: rgba(16, 185, 129, 0.35);
       --orange-accent: #f59e0b;
       --purple-accent: #8b5cf6;
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
-      --font-heading: 'Anton', sans-serif;
+      --text-dim: #64748b;
+      --font-heading: 'Inter', sans-serif;
       --font-body: 'Inter', sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
     }
 
-    /* Light Theme Overrides */
     body.light-theme {
       --bg-color: #f1f5f9;
-      --panel-bg: rgba(255, 255, 255, 0.92);
-      --panel-border: rgba(0, 0, 0, 0.1);
+      --panel-bg: rgba(255, 255, 255, 0.85);
+      --panel-border: rgba(15, 23, 42, 0.08);
+      --panel-border-hover: rgba(2, 132, 199, 0.4);
+      --card-bg: rgba(15, 23, 42, 0.025);
+      --card-border: rgba(15, 23, 42, 0.06);
       --text-main: #0f172a;
       --text-muted: #475569;
+      --text-dim: #94a3b8;
       --cyan-accent: #0284c7;
     }
 
@@ -53,472 +60,709 @@
       display: flex;
       flex-direction: column;
       user-select: none;
-      transition: background-color 0.4s ease;
+      transition: background-color 0.3s ease;
     }
 
-    /* 3D Canvas Viewport */
     #canvas-container {
       position: absolute;
       inset: 0;
       z-index: 1;
     }
 
-    /* Top HUD Header Overlay */
+    /* =========================================================================
+       1. MINIMAL EXECUTIVE HEADER (54px)
+       ========================================================================= */
     header {
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
-      height: 68px;
-      padding: 0 28px;
+      height: 54px;
+      padding: 0 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: linear-gradient(180deg, var(--panel-bg) 0%, rgba(15, 23, 42, 0.6) 80%, transparent 100%);
-      backdrop-filter: blur(14px);
-      z-index: 10;
+      background: linear-gradient(180deg, var(--panel-bg) 0%, rgba(12, 18, 32, 0.4) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      z-index: 20;
       border-bottom: 1px solid var(--panel-border);
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 10px;
     }
 
-    .brand-badge {
-      background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-      color: #ffffff;
-      font-family: var(--font-mono);
-      font-weight: 800;
-      font-size: 11px;
-      padding: 4px 10px;
-      letter-spacing: 1.5px;
-      border-radius: 4px;
-      box-shadow: 0 2px 10px var(--red-glow);
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red-primary);
+      box-shadow: 0 0 10px var(--red-glow);
+      animation: pulse-dot 2s infinite ease-in-out;
     }
 
     .brand-title {
       font-family: var(--font-heading);
-      font-size: 24px;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      background: linear-gradient(90deg, #ffffff, #cbd5e1);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    body.light-theme .brand-title {
-      background: linear-gradient(90deg, #0f172a, #334155);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    /* Real-Time Sync Engine Metrics Bar */
-    .rtos-status-bar {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .status-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(255, 255, 255, 0.05);
-      padding: 5px 10px;
-      border-radius: 6px;
-      border: 1px solid var(--panel-border);
-    }
-
-    .status-item strong {
-      color: var(--text-main);
+      font-size: 13px;
       font-weight: 700;
-    }
-
-    .status-dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--green-accent);
-      box-shadow: 0 0 10px var(--green-accent);
-      animation: pulse-dot 1.5s infinite;
-    }
-
-    .status-dot.fault {
-      background: var(--red-primary);
-      box-shadow: 0 0 12px var(--red-primary);
-    }
-
-    @keyframes pulse-dot {
-      0% { transform: scale(0.9); opacity: 0.8; }
-      50% { transform: scale(1.2); opacity: 1; }
-      100% { transform: scale(0.9); opacity: 0.8; }
-    }
-
-    /* Header Controls (Theme, Audio, Heatmap) */
-    .header-controls {
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-main);
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
-    .btn-header-action {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid var(--panel-border);
-      color: var(--text-main);
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
+    .brand-title span.sep {
+      color: var(--text-dim);
+      font-weight: 300;
+    }
+
+    .brand-ver {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--cyan-accent);
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    /* Central Unified RTOS Telemetry Capsule */
+    .rtos-status-capsule {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-family: var(--font-mono);
       font-size: 11px;
-      font-weight: 700;
+      background: var(--card-bg);
+      border: 1px solid var(--panel-border);
+      padding: 5px 14px;
+      border-radius: 20px;
+      color: var(--text-muted);
+    }
+
+    .capsule-item {
       display: flex;
       align-items: center;
       gap: 6px;
-      transition: all 0.2s ease;
     }
 
-    .btn-header-action:hover {
-      background: rgba(255, 255, 255, 0.16);
+    .capsule-item strong {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .capsule-sep {
+      color: var(--card-border);
+      opacity: 0.6;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green-accent);
+      box-shadow: 0 0 8px var(--green-accent);
+      transition: all 0.3s ease;
+    }
+
+    .status-dot.fault {
+      background: var(--red-primary);
+      box-shadow: 0 0 10px var(--red-primary);
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(0.9); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; }
+    }
+
+    /* Header Actions */
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-action {
+      background: var(--card-bg);
+      border: 1px solid var(--panel-border);
+      color: var(--text-muted);
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.18s ease;
+      font-family: var(--font-body);
+    }
+
+    .btn-action:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--cyan-accent);
+      color: var(--text-main);
+    }
+
+    .btn-action.active-layer {
+      background: rgba(6, 182, 212, 0.15);
       border-color: var(--cyan-accent);
       color: var(--cyan-accent);
     }
 
-    .btn-header-action.active-layer {
-      background: rgba(16, 185, 129, 0.2);
-      border-color: var(--green-accent);
-      color: var(--green-accent);
-      box-shadow: 0 0 12px var(--green-glow);
+    .btn-action.btn-fault-trigger {
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
     }
 
-    /* Left Side Telemetry Panel */
-    .telemetry-panel {
+    .btn-action.btn-fault-trigger:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: var(--red-primary);
+      color: #fff;
+    }
+
+    .btn-key-badge {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: var(--text-dim);
+    }
+
+    /* =========================================================================
+       2. CONSOLIDATED LEFT TELEMETRY DOCK (COMPACT 280px)
+       ========================================================================= */
+    .telemetry-dock {
       position: absolute;
-      top: 80px;
+      top: 68px;
       left: 20px;
-      width: 330px;
+      width: 284px;
       display: flex;
       flex-direction: column;
-      gap: 9px;
+      gap: 8px;
       z-index: 10;
-      pointer-events: none;
+      transition: opacity 0.3s ease, transform 0.3s ease;
     }
 
-    .card-hud {
+    .card-minimal {
       background: var(--panel-bg);
       border: 1px solid var(--panel-border);
-      border-left: 4px solid var(--cyan-accent);
-      border-radius: 8px;
-      padding: 11px 13px;
-      backdrop-filter: blur(14px);
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
-      pointer-events: auto;
-      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      border-radius: 10px;
+      padding: 12px 14px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       cursor: pointer;
     }
 
-    .card-hud:hover {
-      transform: translateX(4px);
-      box-shadow: 0 10px 32px rgba(6, 182, 212, 0.25);
-      border-color: var(--cyan-accent);
+    .card-minimal:hover {
+      border-color: var(--panel-border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.35);
     }
 
-    .card-hud.alert-state {
-      border-left-color: var(--red-primary) !important;
+    .card-minimal.alert-state {
       border-color: var(--red-primary) !important;
-      background: rgba(239, 68, 68, 0.15) !important;
+      background: rgba(239, 68, 68, 0.12) !important;
       box-shadow: 0 0 24px var(--red-glow) !important;
       animation: alert-pulse 1.2s infinite alternate;
     }
 
-    @keyframes alert-pulse {
-      0% { transform: scale(1); }
-      100% { transform: scale(1.02); }
-    }
-
-    .card-header {
+    .card-header-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
 
-    .card-title {
-      font-size: 12px;
+    .card-label {
+      font-size: 10px;
       font-weight: 700;
-      color: var(--text-main);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-dim);
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
 
-    .card-pin-badge {
+    .status-pill {
       font-family: var(--font-mono);
       font-size: 9px;
-      background: rgba(255, 255, 255, 0.1);
-      padding: 2px 6px;
-      border-radius: 3px;
-      color: var(--cyan-accent);
       font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
     }
 
-    .card-value {
-      font-family: var(--font-mono);
-      font-size: 20px;
-      font-weight: 800;
-      color: var(--cyan-accent);
+    .status-pill.green {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--green-accent);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+
+    .status-pill.red {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--red-primary);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+    }
+
+    /* Primary Hero Metric Row */
+    .hero-metric-row {
       display: flex;
       align-items: baseline;
-      gap: 6px;
+      justify-content: space-between;
+      margin-bottom: 6px;
     }
 
-    .card-value small {
+    .hero-speed-val {
+      font-family: var(--font-mono);
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--text-main);
+      letter-spacing: -0.5px;
+      line-height: 1;
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+
+    .hero-speed-val small {
       font-size: 11px;
       font-weight: 600;
-      color: var(--text-muted);
+      color: var(--text-dim);
     }
 
-    .card-subtext {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 4px;
-      display: flex;
-      justify-content: space-between;
+    .hero-density-val {
       font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--cyan-accent);
     }
 
-    /* Neon Glowing Traffic Density Gauge & Sector Heatmap Breakdown */
+    .hero-density-val small {
+      font-size: 9px;
+      color: var(--text-dim);
+    }
+
+    /* Minimal Density Track */
     .density-bar-container {
       width: 100%;
-      height: 7px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 4px;
+      height: 4px;
+      background: var(--card-bg);
+      border-radius: 2px;
       overflow: hidden;
       margin: 6px 0 8px 0;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--card-border);
     }
 
     .density-bar-fill {
       height: 100%;
       width: 24%;
-      background: #00ffcc;
-      border-radius: 4px;
-      transition: width 0.4s ease, background-color 0.4s ease;
-      box-shadow: 0 0 12px rgba(0, 255, 204, 0.8), 0 0 4px #00ffcc;
+      background: var(--cyan-accent);
+      border-radius: 2px;
+      transition: width 0.35s ease, background-color 0.35s ease;
+      box-shadow: 0 0 8px var(--cyan-glow);
     }
 
+    /* Minimal Mini Sector Breakdown */
     .sector-traffic-list {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      background: rgba(0, 0, 0, 0.35);
-      padding: 7px 10px;
-      border-radius: 6px;
-      margin-bottom: 6px;
-      border: 1px solid rgba(0, 255, 204, 0.18);
-      box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      margin-bottom: 8px;
     }
 
     .sector-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 4px 6px;
+      border-radius: 5px;
+      font-family: var(--font-mono);
+      font-size: 9px;
     }
 
     .sector-name {
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 65px;
+    }
+
+    .sector-val {
+      font-weight: 700;
       color: var(--text-muted);
+    }
+
+    .card-footer-subtext {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      padding-top: 4px;
+      border-top: 1px solid var(--card-border);
+    }
+
+    .card-footer-subtext strong {
+      color: var(--text-muted);
+    }
+
+    /* Dual Telemetry Column Grid */
+    .dual-telemetry-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .dual-col {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 8px;
+      transition: border-color 0.2s ease;
+    }
+
+    .dual-col:hover {
+      border-color: var(--panel-border-hover);
+    }
+
+    .dual-col-title {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .dual-col-value {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: baseline;
+      gap: 3px;
+    }
+
+    .dual-col-value small {
+      font-size: 9px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+
+    .dual-col-sub {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--text-dim);
+      margin-top: 3px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Discreet Priority Matrix Dropdown in Dock Footer */
+    .priority-dropdown-container {
+      position: relative;
+    }
+
+    .priority-pill-trigger {
+      width: 100%;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      backdrop-filter: blur(14px);
+      transition: all 0.2s ease;
+    }
+
+    .priority-pill-trigger:hover {
+      border-color: var(--cyan-accent);
+      color: var(--text-main);
+    }
+
+    .priority-popover {
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      z-index: 30;
+    }
+
+    .priority-dropdown-container:hover .priority-popover {
+      display: flex;
+    }
+
+    .priority-row {
+      display: flex;
+      justify-content: space-between;
+      padding-bottom: 3px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .priority-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    /* =========================================================================
+       3. TOP-RIGHT SPEEDO / DENSITY ARC GAUGE (ZERO OVERLAP)
+       ========================================================================= */
+    .hud-gauge-widget {
+      position: absolute;
+      top: 68px;
+      right: 20px;
+      width: 148px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 10px 12px 6px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 10;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .hud-gauge-top-row {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-dim);
+    }
+
+    .hud-led-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .hud-led-pill {
+      width: 16px;
+      height: 8px;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+    }
+
+    .led-green {
+      background: var(--green-accent);
+      box-shadow: 0 0 8px var(--green-accent);
+    }
+
+    .led-red {
+      background: var(--red-primary);
+      box-shadow: 0 0 10px var(--red-primary);
+    }
+
+    .arc-gauge-svg {
+      width: 126px;
+      height: 64px;
+      overflow: visible;
+    }
+
+    .arc-gauge-val {
+      font-family: var(--font-mono);
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-top: -22px;
+      letter-spacing: -0.5px;
+    }
+
+    .arc-gauge-title {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      margin-top: 1px;
+      text-transform: uppercase;
+    }
+
+    /* =========================================================================
+       4. SLIDE-OVER FAULT INJECTION DRAWER (MODERN & NON-INTRUSIVE)
+       ========================================================================= */
+    .fault-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(4px);
+      z-index: 40;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.25s ease;
+    }
+
+    .fault-drawer-backdrop.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .controls-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 320px;
+      background: var(--panel-bg);
+      border-left: 1px solid var(--panel-border);
+      padding: 24px 20px;
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      z-index: 50;
+      box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .controls-panel:not(.hidden) {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 8px;
+    }
+
+    .drawer-title {
+      font-family: var(--font-heading);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-main);
       display: flex;
       align-items: center;
       gap: 6px;
     }
 
-    .sector-val {
-      font-weight: 700;
-      color: #00ffcc;
-      transition: color 0.3s, text-shadow 0.3s;
-      text-shadow: 0 0 8px currentColor;
-    }
-
-    /* Live Alarm Alert Banner Overlay */
-    .alert-overlay {
-      position: absolute;
-      top: 80px;
-      left: 50%;
-      transform: translateX(-50%) translateY(-30px);
-      background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-      color: #ffffff;
-      font-family: var(--font-mono);
-      font-weight: 800;
-      font-size: 13px;
-      padding: 10px 24px;
-      border-radius: 8px;
-      z-index: 20;
-      opacity: 0;
-      pointer-events: none;
-      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-      box-shadow: 0 10px 40px var(--red-glow);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .alert-overlay.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    /* Right Side Fault Injection Panel */
-    .controls-panel {
-      position: absolute;
-      top: 80px;
-      right: 20px;
-      width: 310px;
-      background: var(--panel-bg);
+    .btn-close-drawer {
+      background: var(--card-bg);
       border: 1px solid var(--panel-border);
-      border-top: 4px solid var(--red-primary);
-      border-radius: 8px;
-      padding: 16px;
-      backdrop-filter: blur(14px);
-      z-index: 10;
-      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.25);
-      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease, visibility 0.35s;
-    }
-
-    .controls-panel.hidden {
-      transform: translateX(350px);
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-    }
-
-    .panel-header-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 12px;
-    }
-
-    .panel-title {
-      font-family: var(--font-heading);
-      font-size: 18px;
-      color: var(--text-main);
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
-
-    .panel-subtitle {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .btn-panel-toggle {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid var(--panel-border);
-      color: var(--text-main);
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
+      color: var(--text-dim);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
-      font-size: 11px;
-      transition: all 0.2s;
+      font-size: 13px;
+      transition: all 0.2s ease;
     }
 
-    .btn-panel-toggle:hover {
-      background: var(--red-primary);
-      color: #fff;
+    .btn-close-drawer:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .drawer-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      margin-bottom: 6px;
     }
 
     .btn-fault {
       width: 100%;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--panel-border);
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
       color: var(--text-main);
-      padding: 9px 12px;
+      padding: 10px 14px;
       font-family: var(--font-body);
       font-size: 12px;
-      font-weight: 600;
-      border-radius: 6px;
+      font-weight: 500;
+      border-radius: 8px;
       cursor: pointer;
-      margin-bottom: 8px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      transition: all 0.2s;
+      transition: all 0.2s ease;
     }
 
     .btn-fault:hover {
-      background: rgba(239, 68, 68, 0.15);
-      border-color: var(--red-primary);
-      color: var(--red-primary);
-      transform: translateX(-2px);
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
     }
 
     .btn-fault.btn-reset {
-      background: var(--red-primary);
-      border-color: var(--red-primary);
-      color: #ffffff;
-      margin-top: 8px;
-      font-weight: 700;
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.35);
+      color: var(--green-accent);
+      margin-top: auto;
+      font-weight: 600;
     }
 
     .btn-fault.btn-reset:hover {
-      background: #b91c1c;
-      box-shadow: 0 4px 16px var(--red-glow);
+      background: rgba(16, 185, 129, 0.25);
+      color: #fff;
     }
 
     .key-badge {
       font-family: var(--font-mono);
       font-weight: 700;
       font-size: 10px;
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.08);
       padding: 2px 6px;
-      border-radius: 3px;
-      color: var(--text-muted);
+      border-radius: 4px;
+      color: var(--text-dim);
     }
 
-    /* Floating Tab to reopen panel */
+    /* Floating Tab to reopen panel if user closed it */
     .btn-floating-fault-toggle {
-      position: absolute;
-      top: 80px;
-      right: 20px;
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      border-right: 4px solid var(--red-primary);
-      color: var(--text-main);
-      padding: 8px 14px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 700;
-      cursor: pointer;
-      z-index: 10;
-      backdrop-filter: blur(14px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      opacity: 0;
-      visibility: hidden;
-      transform: translateX(20px);
-      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      display: none;
     }
 
-    .btn-floating-fault-toggle.show {
-      opacity: 1;
-      visibility: visible;
-      transform: translateX(0);
-    }
-
-    /* Bottom Camera Preset Controls Bar */
+    /* =========================================================================
+       5. BOTTOM CAMERA PRESETS DOCK (CLEAN SEGMENTED CONTROL)
+       ========================================================================= */
     .cam-controls {
       position: absolute;
       bottom: 20px;
@@ -526,214 +770,64 @@
       transform: translateX(-50%);
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 4px;
       background: var(--panel-bg);
       border: 1px solid var(--panel-border);
-      padding: 6px 14px;
+      padding: 4px 6px;
       border-radius: 30px;
       z-index: 10;
-      backdrop-filter: blur(14px);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+      transition: opacity 0.3s ease, transform 0.3s ease;
     }
 
     .btn-cam {
       background: transparent;
       border: none;
       color: var(--text-muted);
+      font-family: var(--font-body);
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 600;
       cursor: pointer;
       padding: 6px 12px;
       border-radius: 20px;
-      transition: all 0.2s;
+      transition: all 0.2s ease;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
 
-    .btn-cam:hover, .btn-cam.active {
+    .btn-cam:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .btn-cam.active {
       color: #ffffff;
       background: var(--cyan-accent);
-      box-shadow: 0 2px 10px var(--cyan-glow);
-    }
-
-    /* Floating 3D Component Marker Pins (Google Maps Style) */
-    .pin-label {
-      position: absolute;
-      background: var(--panel-bg);
-      border: 1px solid var(--cyan-accent);
-      border-left: 4px solid var(--cyan-accent);
-      color: var(--text-main);
-      padding: 5px 10px;
-      border-radius: 6px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 700;
-      pointer-events: none;
-      z-index: 5;
-      transform: translate(-50%, -100%);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      white-space: nowrap;
-      transition: all 0.3s;
-    }
-
-    .pin-label.density-green { border-color: #10b981; border-left-color: #10b981; }
-    .pin-label.density-yellow { border-color: #f59e0b; border-left-color: #f59e0b; }
-    .pin-label.density-red {
-      border-color: #ef4444 !important;
-      border-left-color: #ef4444 !important;
-      background: rgba(239, 68, 68, 0.9) !important;
-      color: #fff !important;
-      box-shadow: 0 0 20px var(--red-glow) !important;
-      animation: alert-pulse 1s infinite alternate;
-    }
-
-    /* Subsystem Priority Watermark in Bottom Left */
-    .priority-hud {
-      position: absolute;
-      bottom: 20px;
-      left: 120px;
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--text-muted);
-      backdrop-filter: blur(14px);
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .priority-hud strong {
-      color: var(--text-main);
+      box-shadow: 0 2px 12px var(--cyan-glow);
     }
 
     /* =========================================================================
-       REFERENCE JURY HUD WIDGETS (STATUS PILLS, ARC GAUGE, RADAR DISC)
+       6. TACTICAL RADAR WIDGET (BOTTOM LEFT 60px)
        ========================================================================= */
-    /* 1. Top-Left Status Pill Box */
-    .hud-ref-status {
-      position: absolute;
-      top: 84px;
-      left: 28px;
-      background: rgba(15, 23, 42, 0.88);
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 12px;
-      padding: 10px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      z-index: 15;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
-      backdrop-filter: blur(12px);
-      min-width: 140px;
-    }
-
-    .hud-ref-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.8px;
-    }
-
-    .hud-ref-label {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: #cbd5e1;
-    }
-
-    .hud-dot-label.green { color: #10b981; text-shadow: 0 0 6px #10b981; }
-    .hud-dot-label.red { color: #ef4444; text-shadow: 0 0 6px #ef4444; }
-
-    .hud-led-pill {
-      width: 22px;
-      height: 12px;
-      border-radius: 8px;
-      transition: all 0.3s ease;
-    }
-
-    .led-green {
-      background: #10b981;
-      box-shadow: 0 0 10px #10b981, 0 0 4px #fff;
-    }
-
-    .led-red {
-      background: #ef4444;
-      box-shadow: 0 0 10px #ef4444, 0 0 4px #fff;
-    }
-
-    /* 2. Top-Right Arc Speedo / Density Gauge Widget */
-    .hud-ref-gauge {
-      position: absolute;
-      top: 84px;
-      right: 28px;
-      background: rgba(15, 23, 42, 0.88);
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 16px;
-      padding: 12px 16px 8px 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 15;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
-      backdrop-filter: blur(12px);
-      width: 170px;
-    }
-
-    .arc-gauge-svg {
-      width: 140px;
-      height: 72px;
-      overflow: visible;
-    }
-
-    .arc-gauge-val {
-      font-family: var(--font-heading);
-      font-size: 32px;
-      letter-spacing: 1px;
-      color: #ffffff;
-      margin-top: -26px;
-      text-shadow: 0 2px 12px rgba(0,0,0,0.5);
-    }
-
-    .arc-gauge-title {
-      font-family: var(--font-mono);
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 1.5px;
-      color: #94a3b8;
-      margin-top: 2px;
-      text-transform: uppercase;
-    }
-
-    /* 3. Bottom-Left Tech Radar / Compass Widget */
     .hud-ref-radar {
       position: absolute;
-      bottom: 24px;
-      left: 28px;
-      width: 76px;
-      height: 76px;
+      bottom: 20px;
+      left: 20px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(15, 23, 42, 0.85) 0%, rgba(15, 23, 42, 0.98) 100%);
-      border: 2px solid rgba(16, 185, 129, 0.5);
-      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25), inset 0 0 15px rgba(0,0,0,0.6);
-      z-index: 15;
+      background: radial-gradient(circle, rgba(12, 18, 32, 0.8) 0%, rgba(12, 18, 32, 0.95) 100%);
+      border: 1.5px solid rgba(16, 185, 129, 0.35);
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.15);
+      z-index: 10;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
       backdrop-filter: blur(8px);
+      transition: opacity 0.3s ease;
     }
 
     .radar-sweep-beam {
@@ -741,7 +835,7 @@
       width: 100%;
       height: 100%;
       border-radius: 50%;
-      background: conic-gradient(from 0deg, rgba(16, 185, 129, 0.45) 0deg, transparent 60deg, transparent 360deg);
+      background: conic-gradient(from 0deg, rgba(16, 185, 129, 0.4) 0deg, transparent 55deg, transparent 360deg);
       animation: radar-spin 3s linear infinite;
     }
 
@@ -749,7 +843,7 @@
       position: absolute;
       width: 100%;
       height: 1px;
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.1);
     }
     .radar-crosshair.vert {
       width: 1px;
@@ -758,50 +852,346 @@
 
     .radar-ring {
       position: absolute;
-      width: 42px;
-      height: 42px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
-      border: 1px dashed rgba(255, 255, 255, 0.25);
+      border: 1px dashed rgba(255, 255, 255, 0.2);
     }
 
     .radar-blip {
       position: absolute;
-      width: 6px;
-      height: 6px;
+      width: 5px;
+      height: 5px;
       border-radius: 50%;
       background: #00ffcc;
-      box-shadow: 0 0 8px #00ffcc;
-      animation: alert-pulse 1.2s infinite alternate;
-      top: 24px;
-      left: 48px;
+      box-shadow: 0 0 6px #00ffcc;
+      top: 18px;
+      left: 36px;
     }
 
     @keyframes radar-spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
+
+    /* =========================================================================
+       7. 3D FLOATING SECTOR MARKERS
+       ========================================================================= */
+    .pin-label {
+      position: absolute;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      pointer-events: none;
+      z-index: 5;
+      transform: translate(-50%, -100%);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+      transition: all 0.3s;
+      backdrop-filter: blur(10px);
+    }
+
+    .pin-label.density-green { border-color: rgba(16, 185, 129, 0.4); }
+    .pin-label.density-yellow { border-color: rgba(245, 158, 11, 0.4); }
+    .pin-label.density-red {
+      border-color: var(--red-primary) !important;
+      background: rgba(239, 68, 68, 0.9) !important;
+      color: #fff !important;
+      box-shadow: 0 0 20px var(--red-glow) !important;
+      animation: alert-pulse 1s infinite alternate;
+    }
+
+    /* Alarm Banner */
+    .alert-overlay {
+      position: absolute;
+      top: 68px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 12px;
+      padding: 8px 18px;
+      border-radius: 20px;
+      z-index: 30;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 8px 30px var(--red-glow);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .alert-overlay.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* =========================================================================
+       8. ZEN / CLEAN PRESENTATION MODE (KEY Z)
+       ========================================================================= */
+    body.zen-mode .telemetry-dock,
+    body.zen-mode .hud-gauge-widget,
+    body.zen-mode .hud-ref-radar,
+    body.zen-mode .cam-controls {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transform: scale(0.96) !important;
+    }
+
+    .btn-action.active-zen {
+      background: var(--cyan-accent) !important;
+      color: #fff !important;
+      box-shadow: 0 0 10px var(--cyan-glow);
+    }
   </style>
 </head>
-<body class="light-theme">
+<body>
 
   <!-- 3D Canvas Viewport -->
   <div id="canvas-container"></div>
 
-  <!-- REFERENCE SCREENSHOT HUD WIDGETS -->
-  <!-- 1. Top-Left Status Pills -->
-  <div class="hud-ref-status" id="ref-status-widget">
-    <div class="hud-ref-row">
-      <div class="hud-ref-label"><span class="hud-dot-label green">●</span> STATUS</div>
-      <div class="hud-led-pill led-green" id="hud-status-led"></div>
-    </div>
-    <div class="hud-ref-row">
-      <div class="hud-ref-label"><span class="hud-dot-label red">●</span> HAZARD</div>
-      <div class="hud-led-pill led-red" id="hud-hazard-led"></div>
-    </div>
+  <!-- Floating 3D Sector Traffic Pins (Google Maps Style) -->
+  <div class="pin-label density-green" id="pin-traffic">🚦 DOWNTOWN: 0%</div>
+  <div class="pin-label density-green" id="pin-commercial">🏢 COMMERCIAL: 0%</div>
+  <div class="pin-label density-green" id="pin-waterfront">🌊 WATERFRONT: 0%</div>
+  <div class="pin-label density-green" id="pin-industrial">⚡ INDUSTRIAL: 0%</div>
+
+  <!-- Alarm Banner -->
+  <div class="alert-overlay" id="alert-banner">
+    <span>⚠️</span>
+    <span id="alert-banner-text">ALERT ACTIVE</span>
   </div>
 
-  <!-- 2. Top-Right Arc Speedo / Density Gauge -->
-  <div class="hud-ref-gauge" id="ref-gauge-widget">
+  <!-- =========================================================================
+       1. MINIMAL HEADER BAR
+       ========================================================================= -->
+  <header>
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <div class="brand-title">
+        QNX NEUTRINO <span class="sep">/</span> CITY DIGITAL TWIN
+      </div>
+      <div class="brand-ver">v7.1</div>
+    </div>
+
+    <!-- RTOS Telemetry Capsule -->
+    <div class="rtos-status-capsule">
+      <div class="capsule-item">
+        <div class="status-dot" id="system-dot"></div>
+        <span>RTOS: <strong id="sys-status-text" style="color: var(--green-accent);">OPTIMAL</strong></span>
+      </div>
+      <span class="capsule-sep">•</span>
+      <div class="capsule-item">
+        <span>SYNC: <strong>20 Hz (50ms)</strong></span>
+      </div>
+      <span class="capsule-sep">•</span>
+      <div class="capsule-item">
+        <span>LATENCY: <strong id="sys-latency-text" style="color: var(--cyan-accent);">0.82 ms</strong></span>
+      </div>
+      <span class="capsule-sep">•</span>
+      <div class="capsule-item">
+        <span>MISSES: <strong id="sys-misses-text">0</strong></span>
+      </div>
+      <span class="capsule-sep">•</span>
+      <div class="capsule-item">
+        <span>LINK: <strong id="sys-protocol-text" style="color: var(--cyan-accent);">UDP 9999</strong></span>
+      </div>
+    </div>
+
+    <!-- Header Action Controls -->
+    <div class="header-controls">
+      <button class="btn-action active-layer" id="btn-traffic-layer" onclick="toggleTrafficLayer()" title="Toggle Google Maps 3D Traffic Ribbons">
+        <span>🗺️</span> Heatmap
+      </button>
+      <button class="btn-action" id="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+        <span id="theme-icon">🌙</span> <span id="theme-text">Dark</span>
+      </button>
+      <button class="btn-action" id="btn-audio-toggle" onclick="toggleAudio()" title="Toggle Audio Feedback">
+        <span id="audio-icon">🔊</span> Audio
+      </button>
+      <button class="btn-action btn-fault-trigger" id="btn-fault-toggle" onclick="toggleFaultPanel()" title="Fault Injection Matrix (Key H)">
+        <span>⚡</span> Faults <span class="btn-key-badge">H</span>
+      </button>
+      <button class="btn-action" id="btn-zen-toggle" onclick="toggleZenMode()" title="Zen Clean Presentation Mode (Key Z)">
+        <span>⛶</span> Zen <span class="btn-key-badge">Z</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       2. CONSOLIDATED LEFT TELEMETRY DOCK
+       ========================================================================= */ -->
+  <div class="telemetry-dock">
+    
+    <!-- CARD 1: TRAFFIC & PHYSICAL IR GATE SENSOR (HERO) -->
+    <div class="card-minimal" id="card-traffic" onclick="focusComponent('traffic')">
+      <div class="card-header-row">
+        <div class="card-label">🚦 Traffic & IR Hardware</div>
+        <div class="status-pill green" id="badge-density-los">FREE FLOW</div>
+      </div>
+
+      <!-- Hero Readout -->
+      <div class="hero-metric-row">
+        <div class="hero-speed-val">
+          <span id="val-traffic-speed">0.0</span>
+          <small>km/h</small>
+        </div>
+        <div class="hero-density-val">
+          <span id="val-density-num">0%</span>
+          <small>DENSITY</small>
+        </div>
+      </div>
+
+      <!-- Progress Track -->
+      <div class="density-bar-container">
+        <div class="density-bar-fill" id="density-bar-fill"></div>
+      </div>
+
+      <!-- 4 Sector Mini Breakdown -->
+      <div class="sector-traffic-list">
+        <div class="sector-item">
+          <span class="sector-name">Downtown</span>
+          <span class="sector-val" id="sector-downtown">0%</span>
+        </div>
+        <div class="sector-item">
+          <span class="sector-name">Commercial</span>
+          <span class="sector-val" id="sector-commercial">0%</span>
+        </div>
+        <div class="sector-item">
+          <span class="sector-name">Waterfront</span>
+          <span class="sector-val" id="sector-waterfront">0%</span>
+        </div>
+        <div class="sector-item">
+          <span class="sector-name">Industrial</span>
+          <span class="sector-val" id="sector-industrial">0%</span>
+        </div>
+      </div>
+
+      <!-- Hardware Gate State -->
+      <div class="card-footer-subtext">
+        <span>IR Gate: <strong id="val-beam-status" style="color: var(--green-accent);">CLEAR</strong></span>
+        <span>Vehicle Count: <strong id="val-vehicle-count" style="color: var(--cyan-accent);">0 veh</strong></span>
+      </div>
+    </div>
+
+    <!-- CARD 2: ATMOSPHERE & CLIMATE (MQ-135 + DHT11 COMBINED) -->
+    <div class="card-minimal" id="card-air" onclick="focusComponent('air')">
+      <div class="card-header-row">
+        <div class="card-label">🌿 Atmosphere & Climate</div>
+        <div class="status-pill green" id="val-gas-alert">CLEAN</div>
+      </div>
+
+      <div class="dual-telemetry-grid">
+        <div class="dual-col">
+          <div class="dual-col-title">Air Quality (MQ-135)</div>
+          <div class="dual-col-value">
+            <span id="val-air">22.0</span>
+            <small>AQI</small>
+          </div>
+          <div class="dual-col-sub">
+            <span>BCM 27 • 2 Hz</span>
+            <span>Alerts: <strong id="val-gas-alert-count">0</strong></span>
+          </div>
+        </div>
+
+        <div class="dual-col" id="card-dht">
+          <div class="dual-col-title">Climate (DHT11)</div>
+          <div class="dual-col-value">
+            <span id="val-dht-temp">28.4°C</span>
+          </div>
+          <div class="dual-col-sub">
+            <span>Humidity:</span>
+            <strong id="val-dht-hum" style="color: var(--cyan-accent);">49%</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 3: CRITICAL INFRASTRUCTURE (POWER + WATER COMBINED) -->
+    <div class="card-minimal" id="card-power" onclick="focusComponent('power')">
+      <div class="card-header-row">
+        <div class="card-label">⚡ Infrastructure Utilities</div>
+        <div class="status-pill green">NOMINAL</div>
+      </div>
+
+      <div class="dual-telemetry-grid">
+        <div class="dual-col">
+          <div class="dual-col-title">Power Grid</div>
+          <div class="dual-col-value" style="color: var(--orange-accent);">
+            <span id="val-power">410.0</span>
+            <small>MW</small>
+          </div>
+          <div class="dual-col-sub">
+            <span>Substation East</span>
+            <strong id="fresh-power" style="color: var(--green-accent);">18ms</strong>
+          </div>
+        </div>
+
+        <div class="dual-col" id="card-water" onclick="event.stopPropagation(); focusComponent('water');">
+          <div class="dual-col-title">Water Pressure</div>
+          <div class="dual-col-value" style="color: #38bdf8;">
+            <span id="val-water">65.0</span>
+            <small>PSI</small>
+          </div>
+          <div class="dual-col-sub">
+            <span>Reservoir Net</span>
+            <strong id="fresh-water" style="color: var(--green-accent);">22ms</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DISCREET QNX PRIORITY MATRIX POPOVER -->
+    <div class="priority-dropdown-container">
+      <div class="priority-pill-trigger">
+        <span>ℹ️ QNX 4-Tier Real-Time Priorities</span>
+        <span>▾</span>
+      </div>
+      <div class="priority-popover">
+        <div class="priority-row">
+          <span>Prio 250 (Highest)</span>
+          <strong>Twin Synchronizer (20 Hz, &lt;15ms)</strong>
+        </div>
+        <div class="priority-row">
+          <span>Prio 200 (High)</span>
+          <strong>Safety Watchdog (20 Hz, &lt;5ms)</strong>
+        </div>
+        <div class="priority-row">
+          <span>Prio 150 (Med)</span>
+          <strong>Hardware DAQ (IR 50Hz, MQ 2Hz, DHT 0.5Hz)</strong>
+        </div>
+        <div class="priority-row">
+          <span>Prio 80 (Low)</span>
+          <strong>Twin Analytics Engine (5 Hz)</strong>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- =========================================================================
+       3. TOP-RIGHT ARC SPEEDO / DENSITY GAUGE
+       ========================================================================= -->
+  <div class="hud-gauge-widget" id="ref-gauge-widget">
+    <div class="hud-gauge-top-row">
+      <span>HEALTH</span>
+      <div class="hud-led-row">
+        <div class="hud-led-pill led-green" id="hud-status-led" title="System Health"></div>
+        <div class="hud-led-pill led-green" id="hud-hazard-led" title="Hazard Status"></div>
+      </div>
+    </div>
     <svg class="arc-gauge-svg" viewBox="0 0 150 78">
       <defs>
         <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -810,19 +1200,18 @@
           <stop offset="100%" stop-color="#ef4444" />
         </linearGradient>
       </defs>
-      <!-- Background Guide Track -->
-      <path d="M 20 70 A 55 55 0 0 1 130 70" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="9" stroke-linecap="round" />
-      <!-- Colored Gradient Arc -->
-      <path id="gauge-arc-track" d="M 20 70 A 55 55 0 0 1 130 70" fill="none" stroke="url(#gaugeGrad)" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="60" style="transition: stroke-dashoffset 0.4s ease;" />
-      <!-- Center Needle -->
-      <line id="gauge-needle" x1="75" y1="70" x2="114" y2="31" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" style="transition: all 0.4s ease;" />
-      <circle cx="75" cy="70" r="4.5" fill="#ffffff" />
+      <path d="M 20 70 A 55 55 0 0 1 130 70" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="8" stroke-linecap="round" />
+      <path id="gauge-arc-track" d="M 20 70 A 55 55 0 0 1 130 70" fill="none" stroke="url(#gaugeGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="60" style="transition: stroke-dashoffset 0.35s ease;" />
+      <line id="gauge-needle" x1="75" y1="70" x2="114" y2="31" stroke="#ffffff" stroke-width="2" stroke-linecap="round" style="transition: all 0.35s ease;" />
+      <circle cx="75" cy="70" r="4" fill="#ffffff" />
     </svg>
-    <div class="arc-gauge-val" id="hud-gauge-val">65%</div>
+    <div class="arc-gauge-val" id="hud-gauge-val">0%</div>
     <div class="arc-gauge-title">TRAFFIC DENSITY</div>
   </div>
 
-  <!-- 3. Bottom-Left Radar / Compass Widget -->
+  <!-- =========================================================================
+       4. BOTTOM-LEFT TACTICAL RADAR
+       ========================================================================= -->
   <div class="hud-ref-radar" id="ref-radar-widget">
     <div class="radar-sweep-beam"></div>
     <div class="radar-crosshair"></div>
@@ -831,178 +1220,21 @@
     <div class="radar-blip"></div>
   </div>
 
-  <!-- Floating 3D Sector Traffic Pins (Google Maps Style) -->
-  <div class="pin-label density-green" id="pin-traffic">🚦 DOWNTOWN: 24% DENSITY (FREE FLOW)</div>
-  <div class="pin-label density-green" id="pin-commercial">🏢 COMMERCIAL: 18% DENSITY (NORMAL)</div>
-  <div class="pin-label density-green" id="pin-waterfront">🌊 WATERFRONT: 10% DENSITY (CLEAR)</div>
-  <div class="pin-label density-green" id="pin-industrial">⚡ INDUSTRIAL: 14% DENSITY (NORMAL)</div>
-
-  <!-- Alarm Banner -->
-  <div class="alert-overlay" id="alert-banner">
-    <span>⚠️</span>
-    <span id="alert-banner-text">ALERT ACTIVE</span>
-  </div>
-
-  <!-- Top HUD Overlay -->
-  <header>
-    <div class="brand">
-      <div class="brand-badge">QNX RTOS 7.1</div>
-      <div class="brand-title">CYBER CITY 3D DIGITAL TWIN</div>
+  <!-- =========================================================================
+       5. SLIDE-OVER FAULT INJECTION DRAWER & BACKDROP
+       ========================================================================= -->
+  <div class="fault-drawer-backdrop" id="fault-drawer-backdrop" onclick="toggleFaultPanel()"></div>
+  <div class="controls-panel hidden" id="controls-panel">
+    <div class="drawer-header">
+      <div class="drawer-title">
+        <span>⚡ Fault Injection</span>
+      </div>
+      <button class="btn-close-drawer" onclick="toggleFaultPanel()" title="Close Drawer (HotKey: H)">✕</button>
     </div>
 
-    <div class="rtos-status-bar">
-      <div class="status-item">
-        <div class="status-dot" id="system-dot"></div>
-        <span>SYSTEM: <strong id="sys-status-text" style="color: var(--green-accent);">OPTIMAL</strong></span>
-      </div>
-      <div class="status-item">
-        <span>SYNC: <strong>50ms (20Hz)</strong></span>
-      </div>
-      <div class="status-item">
-        <span>LATENCY: <strong id="sys-latency-text" style="color: var(--cyan-accent);">0.82 ms</strong></span>
-      </div>
-      <div class="status-item">
-        <span>MISSES: <strong id="sys-misses-text">0</strong></span>
-      </div>
-      <div class="status-item">
-        <span>LINK: <strong id="sys-protocol-text" style="color: var(--cyan-accent);">UDP 9999 + MQTT 1883</strong></span>
-      </div>
-    </div>
-
-    <div class="header-controls">
-      <button class="btn-header-action active-layer" id="btn-traffic-layer" onclick="toggleTrafficLayer()" title="Toggle Google Maps 3D Traffic Ribbons">
-        <span>🗺️</span> Traffic Layer: ON
-      </button>
-      <button class="btn-header-action" id="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-        <span id="theme-icon">🌙</span> Dark View
-      </button>
-      <button class="btn-header-action" id="btn-audio-toggle" onclick="toggleAudio()" title="Toggle Sound Feedback">
-        <span id="audio-icon">🔊</span> Audio ON
-      </button>
-    </div>
-  </header>
-
-  <!-- Left Side Telemetry Panel -->
-  <div class="telemetry-panel">
-    <!-- 1. Google Maps Style Traffic Density Card -->
-    <div class="card-hud" id="card-traffic" onclick="focusComponent('traffic')">
-      <div class="card-header">
-        <div class="card-title">🗺️ Traffic Density (Area Heatmap)</div>
-        <div class="card-pin-badge" id="badge-density-los" style="background: rgba(16, 185, 129, 0.2); color: var(--green-accent);">FREE FLOW</div>
-      </div>
-      <div class="card-value" id="val-density">
-        <span id="val-density-num">0%</span> <small>AVG DENSITY</small>
-        <span style="font-size: 11px; margin-left: auto; color: var(--text-muted); font-weight: 600;" id="val-traffic-speed">0.0 km/h</span>
-      </div>
-
-      <!-- Density Progress Gauge Bar -->
-      <div class="density-bar-container">
-        <div class="density-bar-fill" id="density-bar-fill"></div>
-      </div>
-
-      <!-- Google Maps Sector Breakdown -->
-      <div class="sector-traffic-list">
-        <div class="sector-item">
-          <span class="sector-name">🚦 Downtown Arterial (IR Gate)</span>
-          <span class="sector-val" id="sector-downtown">0% • Clear</span>
-        </div>
-        <div class="sector-item">
-          <span class="sector-name">🏢 Commercial Boulevard</span>
-          <span class="sector-val" id="sector-commercial">0% • Clear</span>
-        </div>
-        <div class="sector-item">
-          <span class="sector-name">🌊 Waterfront Bypass</span>
-          <span class="sector-val" id="sector-waterfront">0% • Clear</span>
-        </div>
-        <div class="sector-item">
-          <span class="sector-name">⚡ Industrial Ring Road</span>
-          <span class="sector-val" id="sector-industrial">0% • Clear</span>
-        </div>
-      </div>
-
-      <div class="card-subtext">
-        <span>IR Gate: <strong id="val-beam-status" style="color: var(--green-accent);">CLEAR</strong></span>
-        <span>Count: <strong id="val-vehicle-count" style="color: var(--cyan-accent);">0 veh</strong></span>
-      </div>
-    </div>
-
-    <!-- 2. MQ135 Air Quality Station Card -->
-    <div class="card-hud" id="card-air" style="border-left-color: var(--green-accent);" onclick="focusComponent('air')">
-      <div class="card-header">
-        <div class="card-title">🌿 Air Quality (MQ-135)</div>
-        <div class="card-pin-badge">BCM 27 • 2 Hz</div>
-      </div>
-      <div class="card-value" id="val-air" style="color: var(--green-accent);">22.0 <small>AQI</small></div>
-      <div class="card-subtext">
-        <span>Status: <strong id="val-gas-alert" style="color: var(--green-accent);">CLEAN</strong></span>
-        <span>Alerts: <strong id="val-gas-alert-count">0</strong></span>
-      </div>
-    </div>
-
-    <!-- 3. DHT11 Environment Sensor Card -->
-    <div class="card-hud" id="card-dht" style="border-left-color: var(--purple-accent);" onclick="focusComponent('air')">
-      <div class="card-header">
-        <div class="card-title">🌡️ Environment (DHT11)</div>
-        <div class="card-pin-badge">BCM 4 • 0.5 Hz</div>
-      </div>
-      <div class="card-value" id="val-dht-temp" style="color: var(--purple-accent);">28.4°C <small>/ 49% RH</small></div>
-      <div class="card-subtext">
-        <span>Humidity: <strong id="val-dht-hum" style="color: var(--cyan-accent);">49.4%</strong></span>
-        <span>Bus: <strong style="color: var(--green-accent);">BIT-BANG OK</strong></span>
-      </div>
-    </div>
-
-    <!-- 4. Smart Power Grid Card -->
-    <div class="card-hud" id="card-power" style="border-left-color: var(--orange-accent);" onclick="focusComponent('power')">
-      <div class="card-header">
-        <div class="card-title">⚡ Smart Power Grid</div>
-        <div class="card-pin-badge">5 Hz</div>
-      </div>
-      <div class="card-value" id="val-power" style="color: var(--orange-accent);">410.0 <small>MW</small></div>
-      <div class="card-subtext">
-        <span>Substation: <strong>East Sector</strong></span>
-        <span>Freshness: <strong id="fresh-power" style="color: var(--green-accent);">18ms</strong></span>
-      </div>
-    </div>
-
-    <!-- 5. Water Network Card -->
-    <div class="card-hud" id="card-water" style="border-left-color: #38bdf8;" onclick="focusComponent('water')">
-      <div class="card-header">
-        <div class="card-title">💧 Water Network Reservoir</div>
-        <div class="card-pin-badge">2 Hz</div>
-      </div>
-      <div class="card-value" id="val-water" style="color: #38bdf8;">65.0 <small>PSI</small></div>
-      <div class="card-subtext">
-        <span>Pressure: <strong>Nominal</strong></span>
-        <span>Freshness: <strong id="fresh-water" style="color: var(--green-accent);">22ms</strong></span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Priority Watermark Badge -->
-  <div class="priority-hud">
-    <div><strong>QNX PRIORITY MATRIX:</strong></div>
-    <div>Prio 250 • Twin Sync Engine (20 Hz, &lt;15ms)</div>
-    <div>Prio 200 • Fault & Health Monitor (20 Hz, &lt;5ms)</div>
-    <div>Prio 150 • Hardware DAQ (IR 50Hz, MQ 2Hz, DHT 0.5Hz)</div>
-    <div>Prio 80 • Twin Analytics Engine (5 Hz)</div>
-  </div>
-
-  <!-- Floating Re-open Button when panel is hidden -->
-  <button class="btn-floating-fault-toggle" id="btn-show-fault-panel" onclick="toggleFaultPanel()" title="Show Fault Panel (HotKey: H)">
-    <span>⚡ Show Fault Panel</span>
-    <span class="key-badge">KEY H</span>
-  </button>
-
-  <!-- Right Side Interactive Fault Control Panel -->
-  <div class="controls-panel" id="controls-panel">
-    <div class="panel-header-row">
-      <div>
-        <div class="panel-title">Fault Injection</div>
-        <div class="panel-subtitle">Inject runtime anomalies into QNX RTOS engine:</div>
-      </div>
-      <button class="btn-panel-toggle" onclick="toggleFaultPanel()" title="Hide Panel (HotKey: H)">✕</button>
-    </div>
+    <p class="drawer-desc">
+      Inject runtime anomalies to demonstrate QNX RTOS microkernel fault isolation, priority inheritance, and watchdog recovery:
+    </p>
 
     <button class="btn-fault" onclick="injectFault(1)">
       <span>Simulate Traffic Gridlock</span>
@@ -1020,18 +1252,23 @@
     </button>
 
     <button class="btn-fault btn-reset" onclick="resetFaults()">
-      <span>Reset System & Clear Faults</span>
+      <span>Reset & Recover System</span>
       <span class="key-badge">KEY R</span>
     </button>
   </div>
 
-  <!-- Bottom Camera View Preset Bar -->
+  <!-- Re-open button fallback -->
+  <button class="btn-floating-fault-toggle" id="btn-show-fault-panel" onclick="toggleFaultPanel()"></button>
+
+  <!-- =========================================================================
+       6. BOTTOM CAMERA CONTROLS DOCK
+       ========================================================================= -->
   <div class="cam-controls">
     <button class="btn-cam active" id="btn-cam-overview" onclick="focusComponent('overview')">🏙️ Overview</button>
-    <button class="btn-cam" id="btn-cam-traffic" onclick="focusComponent('traffic')">🚦 Downtown Arterial</button>
-    <button class="btn-cam" id="btn-cam-air" onclick="focusComponent('air')">🌿 MQ-135 & DHT11</button>
-    <button class="btn-cam" id="btn-cam-power" onclick="focusComponent('power')">⚡ Power Grid</button>
-    <button class="btn-cam" id="btn-cam-water" onclick="focusComponent('water')">💧 Water Reservoir</button>
+    <button class="btn-cam" id="btn-cam-traffic" onclick="focusComponent('traffic')">🚦 Downtown IR</button>
+    <button class="btn-cam" id="btn-cam-air" onclick="focusComponent('air')">🌿 Climate</button>
+    <button class="btn-cam" id="btn-cam-power" onclick="focusComponent('power')">⚡ Power</button>
+    <button class="btn-cam" id="btn-cam-water" onclick="focusComponent('water')">💧 Water</button>
     <button class="btn-cam" id="btn-cam-driver" onclick="focusComponent('driver')">🚘 Driver POV</button>
   </div>
 
@@ -1130,21 +1367,21 @@
       isDarkTheme = !isDarkTheme;
       document.body.classList.toggle('light-theme', !isDarkTheme);
       const icon = document.getElementById('theme-icon');
-      const btn = document.getElementById('btn-theme-toggle');
+      const text = document.getElementById('theme-text');
 
       if (isDarkTheme) {
-        icon.textContent = '🌙';
-        btn.childNodes[2].textContent = ' Dark View';
-        scene.background.setHex(0x0b111e);
-        scene.fog.color.setHex(0x0b111e);
+        if (icon) icon.textContent = '🌙';
+        if (text) text.textContent = 'Dark';
+        scene.background.setHex(0x070b12);
+        scene.fog.color.setHex(0x070b12);
         ambientLight.color.setHex(0x4a6585);
         ambientLight.intensity = 0.9;
         sunLight.intensity = 1.0;
         groundMat.color.setHex(0x131d2e);
         roadMat.color.setHex(0x0a0e17);
       } else {
-        icon.textContent = '☀️';
-        btn.childNodes[2].textContent = ' Light View';
+        if (icon) icon.textContent = '☀️';
+        if (text) text.textContent = 'Light';
         scene.background.setHex(0xf1f5f9);
         scene.fog.color.setHex(0xf1f5f9);
         ambientLight.color.setHex(0xffffff);
@@ -2124,14 +2361,18 @@
 
     function toggleFaultPanel() {
       const panel = document.getElementById('controls-panel');
-      const showBtn = document.getElementById('btn-show-fault-panel');
+      const backdrop = document.getElementById('fault-drawer-backdrop');
       panel.classList.toggle('hidden');
-      if (panel.classList.contains('hidden')) {
-        showBtn.classList.add('show');
-      } else {
-        showBtn.classList.remove('show');
-      }
+      const isOpen = !panel.classList.contains('hidden');
+      if (backdrop) backdrop.classList.toggle('active', isOpen);
       playBeep(700, 'sine', 0.05);
+    }
+
+    function toggleZenMode() {
+      document.body.classList.toggle('zen-mode');
+      const btn = document.getElementById('btn-zen-toggle');
+      if (btn) btn.classList.toggle('active-zen', document.body.classList.contains('zen-mode'));
+      playBeep(650, 'sine', 0.05);
     }
 
     let isDriverView = false;
@@ -2170,6 +2411,11 @@
       if (e.key === '3') injectFault(3);
       if (e.key === 'r' || e.key === 'R') resetFaults();
       if (e.key === 'h' || e.key === 'H') toggleFaultPanel();
+      if (e.key === 'z' || e.key === 'Z') toggleZenMode();
+      if (e.key === 'Escape') {
+        const panel = document.getElementById('controls-panel');
+        if (panel && !panel.classList.contains('hidden')) toggleFaultPanel();
+      }
     });
 
     // =========================================================================
