@@ -963,10 +963,11 @@
   <div id="canvas-container"></div>
 
   <!-- Floating 3D Sector Traffic Pins (Google Maps Style) -->
-  <div class="pin-label density-green" id="pin-traffic">🚦 DOWNTOWN: 0%</div>
-  <div class="pin-label density-green" id="pin-commercial">🏢 COMMERCIAL: 0%</div>
-  <div class="pin-label density-green" id="pin-waterfront">🌊 WATERFRONT: 0%</div>
-  <div class="pin-label density-green" id="pin-industrial">⚡ INDUSTRIAL: 0%</div>
+  <div class="pin-label density-green" id="pin-traffic">🚦 DOWNTOWN IR GATE: 0%</div>
+  <div class="pin-label density-green" id="pin-commercial">🏢 DOWNTOWN TOWERS: 0%</div>
+  <div class="pin-label density-green" id="pin-waterfront">💧 WATER RESERVOIR: 0%</div>
+  <div class="pin-label density-green" id="pin-industrial">⚡ POWER SUBSTATION: 0%</div>
+  <div class="pin-label density-green" id="pin-air">🌿 CLIMATE & ECO-PARK: 0%</div>
 
   <!-- Alarm Banner -->
   <div class="alert-overlay" id="alert-banner">
@@ -1473,19 +1474,11 @@
     gridHelper.position.y = 0.05;
     scene.add(gridHelper);
 
-    // River
-    const riverGeom = new THREE.PlaneGeometry(240, 26, 64, 16);
-    const riverMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
-      roughness: 0.08,
-      metalness: 0.85,
-      transparent: true,
-      opacity: 0.85
-    });
-    const river = new THREE.Mesh(riverGeom, riverMat);
-    river.rotation.x = -Math.PI / 2;
-    river.position.set(0, 0.15, -50);
-    scene.add(river);
+    // 4-Quadrant Infrastructure Layout:
+    // Q1 (-X, -Z): Water Reservoir & Treatment Network
+    // Q2 (+X, -Z): Smart Power Grid Substation
+    // Q3 (-X, +Z): Air Quality Station, Climate Dome & Eco-Park
+    // Q4 (+X, +Z): Downtown Curated Iconic Skyscrapers
 
     // Base Asphalt Roads (Dark Slate provides high contrast for glowing neon conduits)
     const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7, metalness: 0.2 });
@@ -1721,26 +1714,44 @@
     const cars = [];
 
     // =========================================================================
-    // 6. 🌿 MQ-135 AIR STATION & DHT11 WEATHER DOME
+    // 6. 🌿 QUADRANT 3: AIR QUALITY, CLIMATE STATION & ECO-PARK (X < -12, Z > 12)
     // =========================================================================
     const airPos = new THREE.Vector3(-55, 12, 55);
     const airGroup = new THREE.Group();
     scene.add(airGroup);
 
-    const chimneyGeom = new THREE.CylinderGeometry(3.5, 4.5, 26, 24);
-    const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.4 });
+    // Eco-Park Ground Pad (Soft Architectural Green Turf)
+    const parkGeom = new THREE.PlaneGeometry(82, 82);
+    const parkMat = new THREE.MeshStandardMaterial({ color: 0x143828, roughness: 0.85, metalness: 0.05 });
+    const parkPad = new THREE.Mesh(parkGeom, parkMat);
+    parkPad.rotation.x = -Math.PI / 2;
+    parkPad.position.set(-58, 0.19, 58);
+    parkPad.receiveShadow = true;
+    airGroup.add(parkPad);
+
+    // Concrete Research Compound Pad
+    const compGeom = new THREE.BoxGeometry(34, 0.4, 34);
+    const compMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6, metalness: 0.2 });
+    const compPad = new THREE.Mesh(compGeom, compMat);
+    compPad.position.set(-48, 0.25, 48);
+    airGroup.add(compPad);
+
+    // MQ-135 Industrial Sensor Station & Exhaust Chimney
+    const chimneyGeom = new THREE.CylinderGeometry(3.2, 4.2, 24, 24);
+    const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7, roughness: 0.35 });
     const chimney = new THREE.Mesh(chimneyGeom, chimneyMat);
-    chimney.position.set(-55, 13, 55);
+    chimney.position.set(-42, 12, 42);
     chimney.castShadow = true;
     airGroup.add(chimney);
 
-    const rimGeom = new THREE.TorusGeometry(3.8, 0.4, 12, 32);
+    const rimGeom = new THREE.TorusGeometry(3.4, 0.35, 12, 32);
     const rimMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
     const chimneyRim = new THREE.Mesh(rimGeom, rimMat);
     chimneyRim.rotation.x = Math.PI / 2;
-    chimneyRim.position.set(-55, 26, 55);
+    chimneyRim.position.set(-42, 24, 42);
     airGroup.add(chimneyRim);
 
+    // Animated Smoke Particles
     const smokeParticles = [];
     const smokeMat = new THREE.MeshBasicMaterial({
       color: 0xe2e8f0,
@@ -1753,9 +1764,9 @@
     for (let i = 0; i < 35; i++) {
       const p = new THREE.Mesh(smokeGeom, smokeMat.clone());
       p.position.set(
-        -55 + (Math.random() - 0.5) * 1.5,
-        26 + (i * 0.8),
-        55 + (Math.random() - 0.5) * 1.5
+        -42 + (Math.random() - 0.5) * 1.5,
+        24 + (i * 0.75),
+        42 + (Math.random() - 0.5) * 1.5
       );
       p.userData = {
         vy: 0.12 + Math.random() * 0.1,
@@ -1767,180 +1778,454 @@
       smokeParticles.push(p);
     }
 
+    // Geodesic Weather Radar Dome (DHT11 & Meteorological Tracking)
     const weatherDome = new THREE.Mesh(
-      new THREE.SphereGeometry(9, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshStandardMaterial({ color: 0x10b981, transparent: true, opacity: 0.35, wireframe: true })
+      new THREE.SphereGeometry(8, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0x10b981, transparent: true, opacity: 0.45, wireframe: true })
     );
-    weatherDome.position.set(-78, 0.2, 55);
+    weatherDome.position.set(-58, 0.25, 42);
     airGroup.add(weatherDome);
 
     const radarDish = new THREE.Mesh(
-      new THREE.ConeGeometry(2.5, 1.2, 16, 1, true),
+      new THREE.ConeGeometry(2.4, 1.2, 16, 1, true),
       new THREE.MeshStandardMaterial({ color: 0x06b6d4, side: THREE.DoubleSide })
     );
-    radarDish.position.set(-78, 18, 55);
+    radarDish.position.set(-58, 16, 42);
     radarDish.rotation.z = Math.PI / 3;
     airGroup.add(radarDish);
 
+    // Working Wind Turbines (2 Clean Eco-Energy Turbines)
+    const windTurbineBlades = [];
+    const turbinePositions = [
+      { x: -74, z: 65 },
+      { x: -50, z: 80 }
+    ];
+
+    turbinePositions.forEach(tPos => {
+      const mast = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.6, 1.4, 28, 16),
+        new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.4, roughness: 0.3 })
+      );
+      mast.position.set(tPos.x, 14, tPos.z);
+      mast.castShadow = true;
+      airGroup.add(mast);
+
+      const nacelle = new THREE.Mesh(
+        new THREE.BoxGeometry(2.2, 1.8, 4.2),
+        new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.3 })
+      );
+      nacelle.position.set(tPos.x, 28, tPos.z);
+      airGroup.add(nacelle);
+
+      const rotorHub = new THREE.Group();
+      rotorHub.position.set(tPos.x, 28, tPos.z + 2.2);
+
+      const hubCenter = new THREE.Mesh(
+        new THREE.SphereGeometry(0.9, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0x06b6d4 })
+      );
+      rotorHub.add(hubCenter);
+
+      for (let a = 0; a < 3; a++) {
+        const blade = new THREE.Mesh(
+          new THREE.BoxGeometry(0.6, 11, 0.15),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 })
+        );
+        blade.position.y = 5.5;
+        const bladePivot = new THREE.Group();
+        bladePivot.rotation.z = (a * 2 * Math.PI) / 3;
+        bladePivot.add(blade);
+        rotorHub.add(bladePivot);
+      }
+
+      airGroup.add(rotorHub);
+      windTurbineBlades.push(rotorHub);
+    });
+
+    // Solar PV Arrays
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 3; col++) {
+        const panel = new THREE.Mesh(
+          new THREE.BoxGeometry(6, 0.3, 4),
+          new THREE.MeshStandardMaterial({ color: 0x1d4ed8, metalness: 0.85, roughness: 0.15 })
+        );
+        panel.rotation.x = Math.PI / 6;
+        panel.position.set(-36 - col * 7.5, 2.5, 68 + row * 6);
+        airGroup.add(panel);
+      }
+    }
+
+    // Eco-Park Architectural Trees (Low-Poly Cones)
+    const treeMat1 = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.7 });
+    const treeMat2 = new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.7 });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
+
+    const parkTrees = [
+      { x: -32, z: 32 }, { x: -36, z: 48 }, { x: -75, z: 35 }, { x: -84, z: 48 },
+      { x: -82, z: 76 }, { x: -35, z: 82 }, { x: -62, z: 66 }, { x: -72, z: 84 }
+    ];
+
+    parkTrees.forEach((t, i) => {
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 2.5, 6), trunkMat);
+      trunk.position.set(t.x, 1.25, t.z);
+      airGroup.add(trunk);
+
+      const foliage = new THREE.Mesh(
+        new THREE.ConeGeometry(2.4, 6.5, 6),
+        (i % 2 === 0) ? treeMat1 : treeMat2
+      );
+      foliage.position.set(t.x, 5.5, t.z);
+      foliage.castShadow = true;
+      airGroup.add(foliage);
+    });
+
     // =========================================================================
-    // 7. ⚡ POWER GRID & 💧 WATER RESERVOIR
+    // 7. ⚡ QUADRANT 2: SMART POWER GRID SUBSTATION (X > 12, Z < -12)
     // =========================================================================
-    const powerPos = new THREE.Vector3(55, 14, -15);
+    const powerPos = new THREE.Vector3(58, 12, -58);
     const powerGroup = new THREE.Group();
     scene.add(powerGroup);
 
-    for (let i = 0; i < 3; i++) {
-      const tower = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.2, 5, 26, 6),
-        new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.85, wireframe: true })
+    // Substation Industrial Gravel Pad
+    const subPadGeom = new THREE.PlaneGeometry(82, 82);
+    const subPadMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9, metalness: 0.1 });
+    const subPad = new THREE.Mesh(subPadGeom, subPadMat);
+    subPad.rotation.x = -Math.PI / 2;
+    subPad.position.set(58, 0.19, -58);
+    subPad.receiveShadow = true;
+    powerGroup.add(subPad);
+
+    // Concrete Equipment Pads
+    const pad1 = new THREE.Mesh(
+      new THREE.BoxGeometry(32, 0.4, 46),
+      new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5, metalness: 0.3 })
+    );
+    pad1.position.set(52, 0.25, -55);
+    powerGroup.add(pad1);
+
+    // 3 Transmission Lattice Pylons with Overhead Grid Lines
+    const pylonCoords = [
+      { x: 38, z: -38 },
+      { x: 62, z: -62 },
+      { x: 80, z: -40 }
+    ];
+
+    pylonCoords.forEach((pos, idx) => {
+      const pylon = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 4.2, 32, 4),
+        new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9, wireframe: true })
       );
-      tower.position.set(45 + i * 11, 13, -15 + (i % 2) * 8);
-      powerGroup.add(tower);
+      pylon.position.set(pos.x, 16, pos.z);
+      powerGroup.add(pylon);
+
+      // Pylon Crossarms
+      const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(14, 0.8, 0.8),
+        new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.8 })
+      );
+      arm.position.set(pos.x, 26, pos.z);
+      powerGroup.add(arm);
+
+      // Warning Beacon
+      const bGeom = new THREE.SphereGeometry(0.4, 8, 8);
+      const bMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+      const beacon = new THREE.Mesh(bGeom, bMat);
+      beacon.position.set(pos.x, 32.5, pos.z);
+      powerGroup.add(beacon);
+    });
+
+    // Overhead High-Voltage Catenary Grid Conductors
+    for (let c = 0; c < 2; c++) {
+      const p1 = pylonCoords[c];
+      const p2 = pylonCoords[c + 1];
+      const lineGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(p1.x, 26, p1.z),
+        new THREE.Vector3((p1.x + p2.x) / 2, 23.5, (p1.z + p2.z) / 2),
+        new THREE.Vector3(p2.x, 26, p2.z)
+      ]);
+      const gridWire = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xfbbf24 }));
+      powerGroup.add(gridWire);
     }
 
-    const waterPos = new THREE.Vector3(-55, 15, -50);
+    // Step-Up Transformers (3 Units with Bushings)
+    for (let i = 0; i < 3; i++) {
+      const transBox = new THREE.Mesh(
+        new THREE.BoxGeometry(6.5, 6, 8),
+        new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.7, roughness: 0.3 })
+      );
+      transBox.position.set(44 + i * 10, 3.25, -70);
+      transBox.castShadow = true;
+      powerGroup.add(transBox);
+
+      // Ceramic Insulators on Top
+      for (let b = 0; b < 3; b++) {
+        const bush = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.25, 0.35, 2.2, 8),
+          new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.1 })
+        );
+        bush.position.set(42.5 + i * 10 + b * 1.5, 7.2, -70);
+        powerGroup.add(bush);
+      }
+    }
+
+    // BESS Battery Energy Storage Container Units (Tesla Megapack Style)
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 3; c++) {
+        const batteryPack = new THREE.Mesh(
+          new THREE.BoxGeometry(9, 4.2, 3.8),
+          new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.3, metalness: 0.2 })
+        );
+        batteryPack.position.set(42 + c * 11, 2.35, -42 - r * 6.5);
+        batteryPack.castShadow = true;
+        powerGroup.add(batteryPack);
+
+        // Status LED Strip on Container
+        const ledStrip = new THREE.Mesh(
+          new THREE.PlaneGeometry(8, 0.3),
+          new THREE.MeshBasicMaterial({ color: 0x10b981 })
+        );
+        ledStrip.position.set(42 + c * 11, 3.8, -42 - r * 6.5 + 1.95);
+        powerGroup.add(ledStrip);
+      }
+    }
+
+    // Substation Operations Center Building
+    const subStationBldg = new THREE.Mesh(
+      new THREE.BoxGeometry(16, 7, 12),
+      new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, metalness: 0.2 })
+    );
+    subStationBldg.position.set(78, 3.75, -74);
+    subStationBldg.castShadow = true;
+    powerGroup.add(subStationBldg);
+
+    // =========================================================================
+    // 8. 💧 QUADRANT 1: WATER RESERVOIR & HYDRAULIC NETWORK (X < -12, Z < -12)
+    // =========================================================================
+    const waterPos = new THREE.Vector3(-58, 12, -58);
     const waterGroup = new THREE.Group();
     scene.add(waterGroup);
 
+    // Expansive Water Reservoir Lake Basin (Deep Reflective Crystal Cyan Water)
+    const basinGeom = new THREE.PlaneGeometry(76, 76, 32, 32);
+    const basinMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      roughness: 0.05,
+      metalness: 0.9,
+      transparent: true,
+      opacity: 0.9
+    });
+    const basin = new THREE.Mesh(basinGeom, basinMat);
+    basin.rotation.x = -Math.PI / 2;
+    basin.position.set(-58, 0.22, -58);
+    waterGroup.add(basin);
+
+    // Concrete Perimeter Dam Embankment
+    const damMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6, metalness: 0.3 });
+    const damWallEast = new THREE.Mesh(new THREE.BoxGeometry(3, 2.2, 80), damMat);
+    damWallEast.position.set(-18, 1.1, -58);
+    waterGroup.add(damWallEast);
+
+    const damWallSouth = new THREE.Mesh(new THREE.BoxGeometry(80, 2.2, 3), damMat);
+    damWallSouth.position.set(-58, 1.1, -18);
+    waterGroup.add(damWallSouth);
+
+    // Elevated Municipal Water Tower
+    const towerPillars = new THREE.Group();
+    for (let c = 0; c < 4; c++) {
+      const leg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.5, 0.6, 24, 8),
+        new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8 })
+      );
+      leg.position.set(
+        -74 + (c % 2) * 8 - 4,
+        12,
+        -40 + Math.floor(c / 2) * 8 - 4
+      );
+      towerPillars.add(leg);
+    }
+    waterGroup.add(towerPillars);
+
     const waterTank = new THREE.Mesh(
-      new THREE.CylinderGeometry(10, 10, 18, 24),
+      new THREE.CylinderGeometry(8.5, 8.0, 11, 32),
       new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.2, metalness: 0.7 })
     );
-    waterTank.position.set(-55, 13, -50);
+    waterTank.position.set(-74, 28, -40);
     waterTank.castShadow = true;
     waterGroup.add(waterTank);
 
+    // Glowing Neon Water Level Ring
+    const tankRing = new THREE.Mesh(
+      new THREE.TorusGeometry(8.8, 0.35, 12, 32),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+    );
+    tankRing.rotation.x = Math.PI / 2;
+    tankRing.position.set(-74, 28, -40);
+    waterGroup.add(tankRing);
+
+    // Circular Clarifier Filtration Tanks
+    for (let ct = 0; ct < 2; ct++) {
+      const clarifier = new THREE.Mesh(
+        new THREE.CylinderGeometry(8, 8, 3.5, 32),
+        new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.5, metalness: 0.3 })
+      );
+      clarifier.position.set(-42, 1.75, -65 - ct * 18);
+      clarifier.castShadow = true;
+      waterGroup.add(clarifier);
+
+      // Clarifier Water Surface
+      const clarWater = new THREE.Mesh(
+        new THREE.CircleGeometry(7.6, 24),
+        new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.05, metalness: 0.9 })
+      );
+      clarWater.rotation.x = -Math.PI / 2;
+      clarWater.position.set(-42, 3.4, -65 - ct * 18);
+      waterGroup.add(clarWater);
+    }
+
+    // Pumping Station Control Building
+    const pumpBuilding = new THREE.Mesh(
+      new THREE.BoxGeometry(14, 7.5, 11),
+      new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.3, metalness: 0.2 })
+    );
+    pumpBuilding.position.set(-66, 3.75, -75);
+    pumpBuilding.castShadow = true;
+    waterGroup.add(pumpBuilding);
+
+    // Azure Glowing Hydraulic Pipelines
+    const pipeMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.85 });
+    const mainPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 38, 12), pipeMat);
+    mainPipe.position.set(-42, 1.2, -45);
+    waterGroup.add(mainPipe);
+
+    // Floating Telemetry Buoys on the Reservoir Lake
+    const buoys = [];
+    const buoyGeom = new THREE.SphereGeometry(0.8, 12, 12);
+    const buoyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3 });
+
+    const buoyPositions = [
+      { x: -55, z: -55 },
+      { x: -75, z: -70 },
+      { x: -35, z: -35 }
+    ];
+
+    buoyPositions.forEach(bPos => {
+      const buoy = new THREE.Mesh(buoyGeom, buoyMat);
+      buoy.position.set(bPos.x, 0.6, bPos.z);
+      const buoyLed = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x00ffcc })
+      );
+      buoyLed.position.y = 0.9;
+      buoy.add(buoyLed);
+      waterGroup.add(buoy);
+      buoys.push(buoy);
+    });
+
     // =========================================================================
-    // 8. ARCHITECTURAL CITY SKYSCRAPERS (MATTE LIGHT PORCELAIN + NEON EDGES)
+    // 9. 🏢 QUADRANT 4: CURATED DOWNTOWN SKYSCRAPERS (X > 12, Z > 12)
     // =========================================================================
+    const commercialPos = new THREE.Vector3(58, 20, 58);
     const buildingGroup = new THREE.Group();
     scene.add(buildingGroup);
 
-    // Architectural Light Porcelain Palette (Matching clean studio look)
-    const bldgColors = [0xf8fafc, 0xf1f5f9, 0xe2e8f0, 0xffffff];
-    
-    // Glowing Neon Edge Wireframe Material (Matching reference screenshot's vibrant glowing red/coral outlines)
+    // Downtown Urban Plaza Paving
+    const plazaGeom = new THREE.PlaneGeometry(82, 82);
+    const plazaMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8, metalness: 0.2 });
+    const plaza = new THREE.Mesh(plazaGeom, plazaMat);
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.set(58, 0.19, 58);
+    plaza.receiveShadow = true;
+    buildingGroup.add(plaza);
+
+    // Glowing Neon Edge Wireframe Material (Iconic Cyberpunk Outline)
     const outlineMat = new THREE.LineBasicMaterial({
       color: 0xff0055,
       transparent: true,
-      opacity: 0.88,
+      opacity: 0.92,
       blending: THREE.AdditiveBlending
     });
 
-    // Rooftop Neon Accent Strip Material
-    const roofNeonMat = new THREE.MeshBasicMaterial({
-      color: 0xff0055,
-      transparent: true,
-      opacity: 0.95,
-      blending: THREE.AdditiveBlending
-    });
-
-    // 1. Central Landmark Skyscraper Complex (Directly inspired by reference screenshot)
-    const landmarkTowers = [
-      { x: 18, z: 18, w: 14, d: 14, h: 68, antenna: true },
-      { x: 18, z: -18, w: 12, d: 15, h: 56, antenna: true },
-      { x: -18, z: 18, w: 15, d: 12, h: 62, antenna: false },
-      { x: -18, z: -18, w: 13, d: 13, h: 50, antenna: true },
-      { x: 32, z: 18, w: 10, d: 12, h: 44, antenna: false },
-      { x: -32, z: 18, w: 11, d: 11, h: 48, antenna: false },
-      { x: 18, z: 32, w: 12, d: 10, h: 42, antenna: false },
-      { x: 18, z: -32, w: 10, d: 11, h: 38, antenna: false }
+    // EXACTLY 6 ICONIC LANDMARK SKYSCRAPERS (Zero Clutter!)
+    const downtownTowers = [
+      { id: 'Alpha',    x: 52, z: 52, w: 16, d: 16, h: 68, antenna: true,  crown: true,  spireH: 14 },
+      { id: 'Beta',     x: 32, z: 46, w: 12, d: 13, h: 50, antenna: false, crown: true,  spireH: 0 },
+      { id: 'Gamma',    x: 74, z: 46, w: 13, d: 12, h: 56, antenna: true,  crown: true,  spireH: 10 },
+      { id: 'Delta',    x: 32, z: 72, w: 12, d: 13, h: 42, antenna: false, crown: false, spireH: 0 },
+      { id: 'Epsilon',  x: 54, z: 74, w: 14, d: 13, h: 48, antenna: true,  crown: true,  spireH: 8 },
+      { id: 'Zeta',     x: 74, z: 70, w: 12, d: 12, h: 38, antenna: false, crown: false, spireH: 0 }
     ];
 
-    landmarkTowers.forEach(t => {
+    downtownTowers.forEach(t => {
       const bGeom = new THREE.BoxGeometry(t.w, t.h, t.d);
       const bldg = new THREE.Mesh(
         bGeom,
         new THREE.MeshStandardMaterial({
           color: 0xf8fafc,
-          roughness: 0.28,
-          metalness: 0.12
+          roughness: 0.25,
+          metalness: 0.15
         })
       );
       bldg.position.set(t.x, t.h / 2, t.z);
       bldg.castShadow = true;
       bldg.receiveShadow = true;
 
-      // Glowing Neon Edge Lines
+      // High-Intensity Glowing Neon Edge Outlines
       const edges = new THREE.EdgesGeometry(bGeom);
       bldg.add(new THREE.LineSegments(edges, outlineMat));
 
-      // Stepped Top Crown with Rooftop Neon Trim
-      const crownH = 5;
-      const crownGeom = new THREE.BoxGeometry(t.w * 0.72, crownH, t.d * 0.72);
-      const crown = new THREE.Mesh(
-        crownGeom,
-        new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.2 })
-      );
-      crown.position.set(0, t.h / 2 + crownH / 2, 0);
-      crown.add(new THREE.LineSegments(new THREE.EdgesGeometry(crownGeom), outlineMat));
-      bldg.add(crown);
+      // Stepped Top Crown
+      if (t.crown) {
+        const crownH = 4.5;
+        const crownGeom = new THREE.BoxGeometry(t.w * 0.72, crownH, t.d * 0.72);
+        const crown = new THREE.Mesh(
+          crownGeom,
+          new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.25 })
+        );
+        crown.position.set(0, t.h / 2 + crownH / 2, 0);
+        crown.add(new THREE.LineSegments(new THREE.EdgesGeometry(crownGeom), outlineMat));
+        bldg.add(crown);
+      }
 
-      // Antenna Spire
+      // Antenna Mast with Flashing Aircraft Warning Beacon
       if (t.antenna) {
-        const spireGeom = new THREE.CylinderGeometry(0.2, 0.4, 12, 8);
+        const spireGeom = new THREE.CylinderGeometry(0.15, 0.35, t.spireH, 8);
         const spireMat = new THREE.MeshBasicMaterial({ color: 0xff0055, blending: THREE.AdditiveBlending });
         const spire = new THREE.Mesh(spireGeom, spireMat);
-        spire.position.set(0, t.h / 2 + crownH + 6, 0);
+        const crownOffset = t.crown ? 4.5 : 0;
+        spire.position.set(0, t.h / 2 + crownOffset + t.spireH / 2, 0);
         bldg.add(spire);
+
+        const beacon = new THREE.Mesh(
+          new THREE.SphereGeometry(0.4, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0xff0055 })
+        );
+        beacon.position.set(0, t.h / 2 + crownOffset + t.spireH, 0);
+        bldg.add(beacon);
       }
 
       buildingGroup.add(bldg);
     });
 
-    // 2. Surrounding Urban Grid Blocks
-    for (let i = 0; i < 54; i++) {
-      const q = i % 4;
-      let x = 0, z = 0;
-
-      if (q === 0) { x = 24 + (i % 6) * 14; z = 24 + Math.floor(i / 6) * 14; }
-      else if (q === 1) { x = -24 - (i % 6) * 14; z = 24 + Math.floor(i / 6) * 14; }
-      else if (q === 2) { x = 24 + (i % 6) * 14; z = -24 - Math.floor(i / 6) * 14; }
-      else { x = -24 - (i % 6) * 14; z = -24 - Math.floor(i / 6) * 14; }
-
-      // Keep corridor arteries clear
-      if (Math.abs(x) < 14 || Math.abs(z) < 14) continue;
-      if (Math.hypot(x - (-55), z - 55) < 28) continue; // Air station clear
-      if (Math.hypot(x - 55, z - (-15)) < 24) continue; // Power grid clear
-      if (Math.hypot(x - (-55), z - (-50)) < 24) continue; // Water tank clear
-      if (Math.abs(x) < 42 && Math.abs(z) < 42) continue; // Central landmark zone clear
-
-      const w = 8 + (i % 3) * 2;
-      const d = 8 + ((i + 1) % 3) * 2;
-      const h = 12 + (i % 7) * 4.5;
-
-      const bGeom = new THREE.BoxGeometry(w, h, d);
-      const bldg = new THREE.Mesh(
-        bGeom,
-        new THREE.MeshStandardMaterial({
-          color: bldgColors[i % bldgColors.length],
-          roughness: 0.35,
-          metalness: 0.1
-        })
-      );
-      bldg.position.set(x, h / 2, z);
-      bldg.castShadow = true;
-      bldg.receiveShadow = true;
-
-      // Add Glowing Neon Edge Contour
-      const edges = new THREE.EdgesGeometry(bGeom);
-      bldg.add(new THREE.LineSegments(edges, outlineMat));
-      buildingGroup.add(bldg);
-    }
+    // Glass Skybridge connecting Tower Alpha and Tower Beta
+    const bridgeGeom = new THREE.BoxGeometry(10, 3.2, 3.5);
+    const bridgeMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.65, roughness: 0.1 });
+    const skybridge = new THREE.Mesh(bridgeGeom, bridgeMat);
+    skybridge.position.set(42, 32, 49);
+    buildingGroup.add(skybridge);
 
     // =========================================================================
-    // 9. 3D FLOATING GOOGLE MAPS SECTOR PINS
+    // 10. 3D FLOATING GOOGLE MAPS SECTOR PINS
     // =========================================================================
-    const commercialPos = new THREE.Vector3(-45, 10, 0);
-    const waterfrontPos = new THREE.Vector3(0, 10, -75);
-    const industrialPos = new THREE.Vector3(50, 10, 0);
+    const waterfrontPos = new THREE.Vector3(-58, 16, -58);
+    const industrialPos = new THREE.Vector3(58, 16, -58);
 
     function updatePins() {
       const pinMap = [
         { id: 'pin-traffic', pos: trafficPos },
         { id: 'pin-commercial', pos: commercialPos },
         { id: 'pin-waterfront', pos: waterfrontPos },
-        { id: 'pin-industrial', pos: industrialPos }
+        { id: 'pin-industrial', pos: industrialPos },
+        { id: 'pin-air', pos: airPos }
       ];
 
       pinMap.forEach(p => {
@@ -2132,26 +2417,32 @@
           // Update 3D Floating Pins
           const pinT = document.getElementById('pin-traffic');
           if (pinT) {
-            pinT.textContent = `🚦 DOWNTOWN: ${Math.round(sectors.downtown)}% DENSITY (${sectors.downtown > 65 ? 'HEAVY' : 'NORMAL'})`;
+            pinT.textContent = `🚦 DOWNTOWN IR: ${Math.round(sectors.downtown)}% DENSITY`;
             pinT.className = `pin-label ${sectors.downtown > 65 ? 'density-red' : (sectors.downtown > 35 ? 'density-yellow' : 'density-green')}`;
           }
 
           const pinC = document.getElementById('pin-commercial');
           if (pinC) {
-            pinC.textContent = `🏢 COMMERCIAL: ${Math.round(sectors.commercial)}% DENSITY`;
+            pinC.textContent = `🏢 DOWNTOWN TOWERS: ${Math.round(sectors.commercial)}%`;
             pinC.className = `pin-label ${sectors.commercial > 65 ? 'density-red' : (sectors.commercial > 35 ? 'density-yellow' : 'density-green')}`;
           }
 
           const pinW = document.getElementById('pin-waterfront');
           if (pinW) {
-            pinW.textContent = `🌊 WATERFRONT: ${Math.round(sectors.waterfront)}% DENSITY`;
+            pinW.textContent = `💧 WATER RESERVOIR: ${Math.round(sectors.waterfront)}%`;
             pinW.className = `pin-label ${sectors.waterfront > 65 ? 'density-red' : (sectors.waterfront > 35 ? 'density-yellow' : 'density-green')}`;
           }
 
           const pinI = document.getElementById('pin-industrial');
           if (pinI) {
-            pinI.textContent = `⚡ INDUSTRIAL: ${Math.round(sectors.industrial)}% DENSITY`;
+            pinI.textContent = `⚡ POWER SUBSTATION: ${Math.round(sectors.industrial)}%`;
             pinI.className = `pin-label ${sectors.industrial > 65 ? 'density-red' : (sectors.industrial > 35 ? 'density-yellow' : 'density-green')}`;
+          }
+
+          const pinA = document.getElementById('pin-air');
+          if (pinA) {
+            pinA.textContent = `🌿 CLIMATE & ECO-PARK: ${streams.air && streams.air.gas_alert ? 'ALERT' : 'CLEAN'}`;
+            pinA.className = `pin-label ${streams.air && streams.air.gas_alert ? 'density-red' : 'density-green'}`;
           }
 
           // 3D Visual reactions for IR Sensor Trip
@@ -2387,19 +2678,22 @@
 
       if (name === 'overview') {
         targetCameraLook.set(0, 0, 0);
-        targetCameraPos.set(75, 65, 90);
+        targetCameraPos.set(90, 80, 110);
       } else if (name === 'traffic') {
-        targetCameraLook.copy(trafficPos);
-        targetCameraPos.set(0, 18, 36);
+        targetCameraLook.set(0, 6, 0);
+        targetCameraPos.set(0, 18, 38);
       } else if (name === 'air') {
-        targetCameraLook.copy(airPos);
-        targetCameraPos.set(-30, 22, 75);
+        targetCameraLook.set(-58, 8, 58);
+        targetCameraPos.set(-30, 26, 92);
       } else if (name === 'power') {
-        targetCameraLook.copy(powerPos);
-        targetCameraPos.set(75, 26, 12);
+        targetCameraLook.set(58, 8, -58);
+        targetCameraPos.set(30, 26, -30);
       } else if (name === 'water') {
-        targetCameraLook.copy(waterPos);
-        targetCameraPos.set(-30, 25, -30);
+        targetCameraLook.set(-58, 8, -58);
+        targetCameraPos.set(-30, 26, -30);
+      } else if (name === 'driver') {
+        targetCameraLook.set(0, 3, -40);
+        targetCameraPos.set(0, 3, 20);
       }
 
       isLerpingCamera = true;
@@ -2456,15 +2750,29 @@
         p.position.z += p.userData.vz;
         p.scale.setScalar(p.scale.x + p.userData.scaleSpeed * delta);
 
-        if (p.position.y > 48) {
+        if (p.position.y > 44) {
           p.position.set(
-            -55 + (Math.random() - 0.5) * 1.5,
-            26,
-            55 + (Math.random() - 0.5) * 1.5
+            -42 + (Math.random() - 0.5) * 1.5,
+            24,
+            42 + (Math.random() - 0.5) * 1.5
           );
           p.scale.setScalar(1.0);
         }
       });
+
+      // Animate Wind Turbines
+      if (typeof windTurbineBlades !== 'undefined') {
+        windTurbineBlades.forEach(b => {
+          b.rotation.z += delta * 2.8;
+        });
+      }
+
+      // Animate Water Buoys Bobbing
+      if (typeof buoys !== 'undefined') {
+        buoys.forEach((b, idx) => {
+          b.position.y = 0.6 + Math.sin(time * 2.5 + idx * 1.8) * 0.18;
+        });
+      }
 
       if (radarDish) {
         radarDish.rotation.y += delta * 2.5;
