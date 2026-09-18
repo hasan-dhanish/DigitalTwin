@@ -1784,7 +1784,14 @@
           if (densNumEl) densNumEl.textContent = `${Math.round(dpct)}%`;
 
           const spdEl = document.getElementById('val-traffic-speed');
-          if (spdEl) spdEl.textContent = `${Number(t.val || 50.0).toFixed(1)} km/h`;
+          const trMs = Number(t.transit_time_ms || 0).toFixed(0);
+          if (spdEl) {
+            if (trMs > 0) {
+              spdEl.innerHTML = `${Number(t.val || 50.0).toFixed(1)} km/h <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(${trMs}ms)</span>`;
+            } else {
+              spdEl.textContent = `${Number(t.val || 50.0).toFixed(1)} km/h`;
+            }
+          }
 
           const losBadge = document.getElementById('badge-density-los');
           const hexColor = getDensityHexStr(dpct);

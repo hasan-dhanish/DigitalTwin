@@ -125,6 +125,7 @@
         </div>
         <div class="metric-row"><span class="metric-label">Speed / Flow</span><span class="metric-val" id="val-traffic-speed">45.0 km/h</span></div>
         <div class="metric-row"><span class="metric-label">Vehicle Count</span><span class="metric-val" id="val-traffic-vehicles">124 vehicles</span></div>
+        <div class="metric-row"><span class="metric-label">Transit Time (6cm)</span><span class="metric-val" id="val-traffic-transit">-- ms</span></div>
         <div class="metric-row"><span class="metric-label">Congestion Level</span><span class="metric-val" id="val-traffic-congestion">LOW (24%)</span></div>
         <div class="metric-row"><span class="metric-label">Freshness</span><span class="metric-val" id="fresh-traffic">12.4 ms</span></div>
       </div>
@@ -346,6 +347,11 @@
           if (vehEl) {
             const blocked = data.streams.traffic.beam_blocked ? ' [BLOCKED]' : '';
             vehEl.innerText = `${data.streams.traffic.vehicle_count} vehicles${blocked}`;
+          }
+          const trEl = document.getElementById('val-traffic-transit');
+          if (trEl && data.streams.traffic.transit_time_ms !== undefined) {
+            const trMs = Number(data.streams.traffic.transit_time_ms || 0);
+            trEl.innerText = trMs > 0 ? `${trMs.toFixed(0)} ms` : '-- ms';
           }
         }
 

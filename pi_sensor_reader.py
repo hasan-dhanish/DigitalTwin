@@ -36,9 +36,9 @@ PIN_IR     = 17   # GPIO 17 — IR Sensor OUT  (Active LOW: 0 = beam blocked)
 PIN_MQ135  = 27   # GPIO 27 — MQ135 DO       (Active LOW: 0 = gas detected)
 
 DHT11_INTERVAL_SEC  = 2.0    # Min stable interval for DHT11 (spec: >=1s)
-IR_INTERVAL_SEC     = 0.02   # 50 Hz — edge detection for vehicles
-MQ135_INTERVAL_SEC  = 0.5    # 2 Hz  — gas threshold monitoring
-UDP_INTERVAL_SEC    = 0.05   # 20 Hz — UDP telemetry stream
+IR_INTERVAL_SEC     = 0.01   # 100 Hz — high-resolution edge detection for vehicle transit timing
+MQ135_INTERVAL_SEC  = 0.5    # 2 Hz   — gas threshold monitoring
+UDP_INTERVAL_SEC    = 0.05   # 20 Hz  — UDP telemetry stream
 
 HOST_PC_IP = sys.argv[1] if len(sys.argv) > 1 else "10.12.2.208"
 UDP_PORT   = int(sys.argv[2]) if len(sys.argv) > 2 else 9999
@@ -696,7 +696,7 @@ class TaskMetrics:
 task_metrics = {
     "p1_synchronizer": TaskMetrics("P1_Twin_Synchronizer", rate_hz=20.0, deadline_ms=15.0,  priority=250, core_mask=0x01, core_name="Core 0"),
     "p2_fault_monitor":TaskMetrics("P2_Fault_Monitor",     rate_hz=20.0, deadline_ms=5.0,   priority=200, core_mask=0x02, core_name="Core 1"),
-    "p3_acq_traffic":  TaskMetrics("P3_Acq_Traffic_IR",    rate_hz=50.0, deadline_ms=5.0,   priority=150, core_mask=0x04, core_name="Core 2"),
+    "p3_acq_traffic":  TaskMetrics("P3_Acq_Traffic_IR",    rate_hz=100.0, deadline_ms=5.0,  priority=150, core_mask=0x04, core_name="Core 2"),
     "p3_acq_air":      TaskMetrics("P3_Acq_Air_MQ135",     rate_hz=2.0,  deadline_ms=10.0,  priority=150, core_mask=0x04, core_name="Core 2"),
     "p3_acq_env":      TaskMetrics("P3_Acq_Env_DHT11",     rate_hz=0.5,  deadline_ms=120.0, priority=150, core_mask=0x04, core_name="Core 2"),
     "p4_analytics":    TaskMetrics("P4_City_Analytics",    rate_hz=5.0,  deadline_ms=50.0,  priority=80,  core_mask=0x08, core_name="Core 3"),
@@ -715,7 +715,13 @@ class AtomicSensorState:
 
         # Subsystems (Raw Acquisition Data)
         self.traffic_raw = {
-            "beam_blocked": False, "event_times": [], "total_vehicles": 0,
+            "beam_blocked": False,
+            "event_times": [],
+            "total_vehicles": 0,
+            "last_speed_kmh": 45.0,
+            "last_transit_ms": 0.0,
+            "raw_phys_kmh": 0.0,
+            "vehicle_length_cm": 6.0,
             "timestamp": time.time()
         }
         self.air_raw = {
@@ -729,7 +735,7 @@ class AtomicSensorState:
 
         # Computed Analytics (P4 Output)
         self.analytics = {
-            "traffic_speed": 0.0, "congestion_pct": 12.0, "congestion_level": "LOW",
+            "traffic_speed": 45.0, "congestion_pct": 12.0, "congestion_level": "LOW",
             "aqi": 24.0, "air_quality_label": "GOOD",
             "heat_index_c": 24.5, "comfort_label": "COMFORTABLE",
             "estimated_power_mw": 412.0
@@ -749,7 +755,7 @@ class AtomicSensorState:
         }
 
     # P3 Data Acquisition Writers
-    def update_traffic_raw(self, blocked, new_event=False):
+    def update_traffic_raw(self, blocked, new_event=False, transit_ms=0.0, calculated_speed=None, raw_phys_kmh=None):
         with self._lock:
             now = time.monotonic()
             self.seq_id += 1
@@ -758,6 +764,13 @@ class AtomicSensorState:
             if new_event:
                 self.traffic_raw["total_vehicles"] += 1
                 self.traffic_raw["event_times"].append(now)
+                if transit_ms > 0:
+                    self.traffic_raw["last_transit_ms"] = transit_ms
+                if calculated_speed is not None:
+                    self.traffic_raw["last_speed_kmh"] = calculated_speed
+                    self.traffic_raw["raw_phys_kmh"]   = raw_phys_kmh or calculated_speed
+                    # Immediately propagate the calculated speed to analytics
+                    self.analytics["traffic_speed"]     = calculated_speed
 
     def update_air_raw(self, alert, is_new=False):
         with self._lock:
@@ -828,6 +841,9 @@ class AtomicSensorState:
                     "unit": "km/h",
                     "vehicle_count": self.traffic_raw["total_vehicles"],
                     "beam_blocked": self.traffic_raw["beam_blocked"],
+                    "transit_time_ms": self.traffic_raw.get("last_transit_ms", 0.0),
+                    "raw_phys_kmh": self.traffic_raw.get("raw_phys_kmh", 0.0),
+                    "vehicle_length_cm": self.traffic_raw.get("vehicle_length_cm", 6.0),
                     "density_pct": self.analytics.get("density_pct", 24.0),
                     "density_level": self.analytics.get("density_level", "FREE FLOW"),
                     "sectors": self.analytics.get("sectors", {"downtown": 24.0, "commercial": 18.0, "waterfront": 10.0, "industrial": 14.0}),
@@ -877,30 +893,83 @@ _start_time  = time.monotonic()
 # ==============================================================================
 
 def thread_p3_acq_traffic():
-    """P3 Data Acquisition: IR Sensor (50 Hz, 20ms period, Priority: 150, Core 2)"""
+    """P3 Data Acquisition: IR Sensor (100 Hz, 10ms period, Priority: 150, Core 2)"""
     metric = task_metrics["p3_acq_traffic"]
     set_qnx_thread_priority(metric.priority)
     set_qnx_thread_affinity(metric.core_mask)
-    print(f"[P3 Acquisition] IR Traffic     | Rate: 50 Hz | Deadline: 5.0ms  | Prio: 150 | {metric.core_name}")
+    print(f"[P3 Acquisition] IR Traffic     | Rate: 100 Hz| Deadline: 5.0ms  | Prio: 150 | {metric.core_name}")
+
+    VEHICLE_LENGTH_M = 0.06   # 6.0 cm assumed vehicle length
+    MIN_TRANSIT_SEC  = 0.006  # 6ms minimum debounce filter to eliminate optical jitter
 
     last_lvl = 1
+    t_block_start = None
 
     while True:
         t_start = metric.begin_tick()
 
         lvl = gpio.input(PIN_IR)
-        blocked = (lvl == 0)
+        t_now = time.perf_counter()
 
-        if lvl == 0 and last_lvl == 1:       # Falling edge: vehicle interrupted beam
-            sensor_state.update_traffic_raw(blocked=True, new_event=True)
-        elif lvl == 1 and last_lvl == 0:     # Rising edge: beam clear
-            sensor_state.update_traffic_raw(blocked=False, new_event=False)
+        # 1. Falling edge: Object enters sensor beam (HIGH -> LOW)
+        if lvl == 0 and last_lvl == 1:
+            t_block_start = t_now
+            sensor_state.update_traffic_raw(blocked=True, new_event=False)
+
+        # 2. Rising edge: Object clears sensor beam (LOW -> HIGH)
+        elif lvl == 1 and last_lvl == 0:
+            if t_block_start is not None:
+                duration_s = t_now - t_block_start
+                if duration_s >= MIN_TRANSIT_SEC:
+                    transit_ms = duration_s * 1000.0
+
+                    # Speed = Distance / Time -> (0.06m / duration_s) * 3.6 km/h = 0.216 / duration_s
+                    # Longer blocking duration = slower speed; Faster crossing = higher speed
+                    raw_phys_kmh = round(0.216 / duration_s, 2)
+
+                    # Calibrated City Digital Twin Speed:
+                    # Maps human hand sweeps / desktop toy-car crossings (50ms - 900ms)
+                    # to realistic urban street speeds (10 km/h - 80 km/h).
+                    calibrated_kmh = round(min(88.0, max(5.0, (0.216 / duration_s) * 18.0)), 1)
+
+                    # Immediately update traffic state & calculated speed
+                    sensor_state.update_traffic_raw(
+                        blocked=False,
+                        new_event=True,
+                        transit_ms=round(transit_ms, 1),
+                        calculated_speed=calibrated_kmh,
+                        raw_phys_kmh=raw_phys_kmh
+                    )
+
+                    total_veh = sensor_state.traffic_raw["total_vehicles"]
+                    print(
+                        f"\n[IR SENSOR 🚗] Vehicle #{total_veh:03d} Detected! "
+                        f"Blocked Time: {transit_ms:6.1f} ms | "
+                        f"Speed: {calibrated_kmh:4.1f} km/h (Physical: {raw_phys_kmh:4.2f} km/h | L=6cm)\n"
+                    )
+                else:
+                    sensor_state.update_traffic_raw(blocked=False, new_event=False)
+                t_block_start = None
+            else:
+                sensor_state.update_traffic_raw(blocked=False, new_event=False)
+
+        # 3. Object Still Blocking: Queueing or slow crawl at gate
+        elif lvl == 0 and last_lvl == 0:
+            if t_block_start is not None:
+                duration_so_far = t_now - t_block_start
+                if duration_so_far > 1.2:
+                    crawl_speed = max(3.0, round(20.0 / (duration_so_far * 1.5), 1))
+                    with sensor_state._lock:
+                        sensor_state.analytics["traffic_speed"] = crawl_speed
+            sensor_state.update_traffic_raw(blocked=True, new_event=False)
+
+        # 4. Sensor clear
         else:
-            sensor_state.update_traffic_raw(blocked=blocked, new_event=False)
+            sensor_state.update_traffic_raw(blocked=False, new_event=False)
 
         last_lvl = lvl
         metric.end_tick(t_start)
-        time.sleep(metric.period_s)
+        time.sleep(0.01)  # 10ms sampling interval = 100 Hz precision timing
 
 
 def thread_p3_acq_air():
@@ -987,11 +1056,16 @@ def thread_p4_analytics():
 
         if beam_blocked:
             # Active obstacle/standstill queue detected at sensor gate
-            speed = 6.0
+            speed = max(3.0, round(sensor_state.analytics.get("traffic_speed", 25.0) * 0.4, 1))
             density_pct = min(100.0, 84.0 + (recent_count * 2.0))
         else:
-            # Free-flow base speed (55 km/h) reduced by accumulated flow
-            speed = round(max(14.0, min(75.0, 56.0 - (vpm * 1.1))), 1)
+            # When recent vehicles have passed, use the exact speed calculated from 6cm transit duration!
+            last_speed = sensor_state.traffic_raw.get("last_speed_kmh")
+            if last_speed and recent_count > 0:
+                speed = last_speed
+            else:
+                # Free-flow base speed (55 km/h) reduced by accumulated flow
+                speed = round(max(14.0, min(75.0, 56.0 - (vpm * 1.1))), 1)
             density_pct = round(min(100.0, max(8.0, (vpm / 22.0) * 55.0 + (recent_count * 1.2))), 1)
 
         # Standard Level of Service (LOS) Density Categorization
@@ -1112,13 +1186,16 @@ def thread_p1_twin_synchronizer(sock):
 
         # 2. Package Multi-Subsystem Telemetry Streams
         packets = [
-            # Traffic Stream (Greenshields Density Model)
+            # Traffic Stream (Greenshields Density Model + 6cm Precision Transit Speed)
             {
                 "stream": "traffic",
                 "value": snap["traffic"]["val"],
                 "unit": "km/h",
                 "vehicle_count": snap["traffic"]["vehicle_count"],
                 "beam_blocked": snap["traffic"]["beam_blocked"],
+                "transit_time_ms": snap["traffic"].get("transit_time_ms", 0.0),
+                "raw_phys_kmh": snap["traffic"].get("raw_phys_kmh", 0.0),
+                "vehicle_length_cm": 6.0,
                 "density_pct": snap["traffic"]["density_pct"],
                 "density_level": snap["traffic"]["density_level"],
                 "sectors": snap["traffic"]["sectors"],
@@ -1236,9 +1313,10 @@ def thread_console_hud():
         sync_metric = task_metrics["p1_synchronizer"]
         total_misses = sum(m.deadline_misses for m in task_metrics.values())
 
+        transit_ms = snap["traffic"].get("transit_time_ms", 0.0)
         sys.stdout.write(
-            f"\r[P1:{sync_metric.priority}|{snap['system_state'][:15]}] "
-            f"Vehicles:{snap['traffic']['vehicle_count']:3d} ({snap['traffic']['val']:4.1f}km/h) | "
+            f"\r[P1:{sync_metric.priority}|{snap['system_state'][:14]}] "
+            f"Vehicles:{snap['traffic']['vehicle_count']:3d} ({snap['traffic']['val']:4.1f}km/h | {transit_ms:3.0f}ms) | "
             f"Air:{snap['air']['val']:3.0f}AQI [{air_status}] | "
             f"DHT:{t_s},{h_s} | "
             f"SyncLat:{sync_metric.exec_time_ms:4.2f}ms Misses:{total_misses} "
