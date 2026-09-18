@@ -834,6 +834,13 @@ class AtomicSensorState:
     # P1 Twin Synchronizer Reader (Atomic Consistent Snapshot)
     def get_consistent_snapshot(self):
         with self._lock:
+            now_mono = time.monotonic()
+            last_ev = self.traffic_raw.get("last_event_time", 0.0)
+            # Active transit display window: 3.0 seconds after a vehicle pass
+            is_active_vehicle = (now_mono - last_ev) <= 3.0
+            live_speed = self.analytics["traffic_speed"] if is_active_vehicle else 0.0
+            live_transit = self.traffic_raw.get("last_transit_ms", 0.0) if is_active_vehicle else 0.0
+
             snap = {
                 "seq": self.seq_id,
                 "timestamp": time.time(),
@@ -841,12 +848,12 @@ class AtomicSensorState:
                 "stale_count": self.fault_status["stale_count"],
                 "watchdog": self.fault_status["watchdog"],
                 "traffic": {
-                    "val": self.analytics["traffic_speed"],
+                    "val": live_speed,
                     "unit": "km/h",
                     "vehicle_count": self.traffic_raw["total_vehicles"],
                     "beam_blocked": self.traffic_raw["beam_blocked"],
-                    "transit_time_ms": self.traffic_raw.get("last_transit_ms", 0.0),
-                    "raw_phys_kmh": self.traffic_raw.get("raw_phys_kmh", 0.0),
+                    "transit_time_ms": live_transit,
+                    "raw_phys_kmh": self.traffic_raw.get("raw_phys_kmh", 0.0) if is_active_vehicle else 0.0,
                     "vehicle_length_cm": self.traffic_raw.get("vehicle_length_cm", 6.0),
                     "density_pct": self.analytics.get("density_pct", 0.0),
                     "density_level": self.analytics.get("density_level", "FREE FLOW"),
@@ -1330,9 +1337,12 @@ def thread_console_hud():
         total_misses = sum(m.deadline_misses for m in task_metrics.values())
 
         transit_ms = snap["traffic"].get("transit_time_ms", 0.0)
+        speed_val  = snap["traffic"]["val"]
+        speed_str  = f"{speed_val:4.1f}km/h" if speed_val > 0 else " 0.0km/h"
+        transit_str = f"{transit_ms:3.0f}ms" if transit_ms > 0 else "  0ms"
         sys.stdout.write(
             f"\r[P1:{sync_metric.priority}|{snap['system_state'][:14]}] "
-            f"Vehicles:{snap['traffic']['vehicle_count']:3d} ({snap['traffic']['val']:4.1f}km/h | {transit_ms:3.0f}ms) | "
+            f"Vehicles:{snap['traffic']['vehicle_count']:3d} ({speed_str} | {transit_str}) | "
             f"Air:{snap['air']['val']:3.0f}AQI [{air_status}] | "
             f"DHT:{t_s},{h_s} | "
             f"SyncLat:{sync_metric.exec_time_ms:4.2f}ms Misses:{total_misses} "
