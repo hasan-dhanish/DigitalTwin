@@ -717,8 +717,9 @@ class AtomicSensorState:
         self.traffic_raw = {
             "beam_blocked": False,
             "event_times": [],
+            "last_event_time": 0.0,
             "total_vehicles": 0,
-            "last_speed_kmh": 45.0,
+            "last_speed_kmh": 0.0,
             "last_transit_ms": 0.0,
             "raw_phys_kmh": 0.0,
             "vehicle_length_cm": 6.0,
@@ -735,7 +736,9 @@ class AtomicSensorState:
 
         # Computed Analytics (P4 Output)
         self.analytics = {
-            "traffic_speed": 45.0, "congestion_pct": 12.0, "congestion_level": "LOW",
+            "traffic_speed": 0.0, "congestion_pct": 0.0, "congestion_level": "FREE FLOW",
+            "density_pct": 0.0, "density_level": "FREE FLOW",
+            "sectors": {"downtown": 0.0, "commercial": 0.0, "waterfront": 0.0, "industrial": 0.0},
             "aqi": 24.0, "air_quality_label": "GOOD",
             "heat_index_c": 24.5, "comfort_label": "COMFORTABLE",
             "estimated_power_mw": 412.0
@@ -764,6 +767,7 @@ class AtomicSensorState:
             if new_event:
                 self.traffic_raw["total_vehicles"] += 1
                 self.traffic_raw["event_times"].append(now)
+                self.traffic_raw["last_event_time"] = now
                 if transit_ms > 0:
                     self.traffic_raw["last_transit_ms"] = transit_ms
                 if calculated_speed is not None:
@@ -844,10 +848,10 @@ class AtomicSensorState:
                     "transit_time_ms": self.traffic_raw.get("last_transit_ms", 0.0),
                     "raw_phys_kmh": self.traffic_raw.get("raw_phys_kmh", 0.0),
                     "vehicle_length_cm": self.traffic_raw.get("vehicle_length_cm", 6.0),
-                    "density_pct": self.analytics.get("density_pct", 24.0),
+                    "density_pct": self.analytics.get("density_pct", 0.0),
                     "density_level": self.analytics.get("density_level", "FREE FLOW"),
-                    "sectors": self.analytics.get("sectors", {"downtown": 24.0, "commercial": 18.0, "waterfront": 10.0, "industrial": 14.0}),
-                    "congestion_pct": self.analytics.get("density_pct", 24.0),
+                    "sectors": self.analytics.get("sectors", {"downtown": 0.0, "commercial": 0.0, "waterfront": 0.0, "industrial": 0.0}),
+                    "congestion_pct": self.analytics.get("density_pct", 0.0),
                     "congestion_level": self.analytics.get("density_level", "FREE FLOW"),
                     "freshness_ms": self.fault_status["traffic_freshness_ms"],
                     "stale": self.fault_status["traffic_stale"]
@@ -1051,40 +1055,52 @@ def thread_p4_analytics():
             gas_alert    = sensor_state.air_raw["gas_alert"]
             temp         = sensor_state.env_raw["temperature"]
             hum          = sensor_state.env_raw["humidity"]
+            total_veh    = sensor_state.traffic_raw["total_vehicles"]
+            last_speed   = sensor_state.traffic_raw.get("last_speed_kmh", 0.0)
+            last_event_t = sensor_state.traffic_raw.get("last_event_time", 0.0)
 
         vpm = (recent_count / WINDOW) * 60.0
 
         if beam_blocked:
             # Active obstacle/standstill queue detected at sensor gate
-            speed = max(3.0, round(sensor_state.analytics.get("traffic_speed", 25.0) * 0.4, 1))
+            speed = max(0.0, round(sensor_state.analytics.get("traffic_speed", 25.0) * 0.4, 1))
             density_pct = min(100.0, 84.0 + (recent_count * 2.0))
+        elif recent_count > 0 and (now - last_event_t) <= 4.0 and last_speed > 0:
+            # When a vehicle was detected within the last 4 seconds: display its measured speed
+            speed = last_speed
+            density_pct = round(min(100.0, max(5.0, (vpm / 22.0) * 55.0 + (recent_count * 1.2))), 1)
         else:
-            # When recent vehicles have passed, use the exact speed calculated from 6cm transit duration!
-            last_speed = sensor_state.traffic_raw.get("last_speed_kmh")
-            if last_speed and recent_count > 0:
-                speed = last_speed
-            else:
-                # Free-flow base speed (55 km/h) reduced by accumulated flow
-                speed = round(max(14.0, min(75.0, 56.0 - (vpm * 1.1))), 1)
-            density_pct = round(min(100.0, max(8.0, (vpm / 22.0) * 55.0 + (recent_count * 1.2))), 1)
+            # When NO vehicle is detected (idle road, count 0, or no crossing in > 4s):
+            # Speed stays strictly at 0.0 km/h!
+            speed = 0.0
+            density_pct = round(min(100.0, (vpm / 22.0) * 40.0), 1) if recent_count > 0 else 0.0
 
         # Standard Level of Service (LOS) Density Categorization
-        if density_pct >= 75.0:
-            density_level = "GRIDLOCK"
-        elif density_pct >= 50.0:
-            density_level = "HEAVY"
-        elif density_pct >= 28.0:
-            density_level = "MODERATE"
-        else:
+        if density_pct <= 0.0:
             density_level = "FREE FLOW"
+            sectors = {
+                "downtown": 0.0,
+                "commercial": 0.0,
+                "waterfront": 0.0,
+                "industrial": 0.0
+            }
+        else:
+            if density_pct >= 75.0:
+                density_level = "GRIDLOCK"
+            elif density_pct >= 50.0:
+                density_level = "HEAVY"
+            elif density_pct >= 28.0:
+                density_level = "MODERATE"
+            else:
+                density_level = "FREE FLOW"
 
-        # Multi-Sector Density Distribution (Google Maps Area Breakdown)
-        sectors = {
-            "downtown":   round(density_pct, 1),
-            "commercial": round(max(5.0, min(100.0, density_pct * 0.72)), 1),
-            "waterfront": round(max(5.0, min(100.0, density_pct * 0.38)), 1),
-            "industrial": round(max(5.0, min(100.0, density_pct * 0.58)), 1)
-        }
+            # Multi-Sector Density Distribution (Google Maps Area Breakdown)
+            sectors = {
+                "downtown":   round(density_pct, 1),
+                "commercial": round(max(0.0, min(100.0, density_pct * 0.72)), 1),
+                "waterfront": round(max(0.0, min(100.0, density_pct * 0.38)), 1),
+                "industrial": round(max(0.0, min(100.0, density_pct * 0.58)), 1)
+            }
 
         # 2. Air Quality Analytics
         aqi = 195.0 if gas_alert else (22.0 + (recent_count * 1.5))

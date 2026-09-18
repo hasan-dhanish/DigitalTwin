@@ -40,14 +40,14 @@ g_telemetry = {
     "watchdog": "HEALTHY",
     "streams": {
         "traffic": {
-            "val": 45.0,
+            "val": 0.0,
             "unit": "km/h",
             "vehicle_count": 0,
             "beam_blocked": False,
             "transit_time_ms": 0.0,
-            "density_pct": 24.0,
+            "density_pct": 0.0,
             "density_level": "FREE FLOW",
-            "sectors": {"downtown": 24.0, "commercial": 18.0, "waterfront": 10.0, "industrial": 14.0},
+            "sectors": {"downtown": 0.0, "commercial": 0.0, "waterfront": 0.0, "industrial": 0.0},
             "freshness_ms": 12.4,
             "stale": False
         },

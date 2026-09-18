@@ -891,8 +891,8 @@
         <div class="card-pin-badge" id="badge-density-los" style="background: rgba(16, 185, 129, 0.2); color: var(--green-accent);">FREE FLOW</div>
       </div>
       <div class="card-value" id="val-density">
-        <span id="val-density-num">24%</span> <small>AVG DENSITY</small>
-        <span style="font-size: 11px; margin-left: auto; color: var(--text-muted); font-weight: 600;" id="val-traffic-speed">52.4 km/h</span>
+        <span id="val-density-num">0%</span> <small>AVG DENSITY</small>
+        <span style="font-size: 11px; margin-left: auto; color: var(--text-muted); font-weight: 600;" id="val-traffic-speed">0.0 km/h</span>
       </div>
 
       <!-- Density Progress Gauge Bar -->
@@ -904,25 +904,25 @@
       <div class="sector-traffic-list">
         <div class="sector-item">
           <span class="sector-name">🚦 Downtown Arterial (IR Gate)</span>
-          <span class="sector-val" id="sector-downtown">24% • Normal</span>
+          <span class="sector-val" id="sector-downtown">0% • Clear</span>
         </div>
         <div class="sector-item">
           <span class="sector-name">🏢 Commercial Boulevard</span>
-          <span class="sector-val" id="sector-commercial">18% • Fast</span>
+          <span class="sector-val" id="sector-commercial">0% • Clear</span>
         </div>
         <div class="sector-item">
           <span class="sector-name">🌊 Waterfront Bypass</span>
-          <span class="sector-val" id="sector-waterfront">10% • Clear</span>
+          <span class="sector-val" id="sector-waterfront">0% • Clear</span>
         </div>
         <div class="sector-item">
           <span class="sector-name">⚡ Industrial Ring Road</span>
-          <span class="sector-val" id="sector-industrial">14% • Normal</span>
+          <span class="sector-val" id="sector-industrial">0% • Clear</span>
         </div>
       </div>
 
       <div class="card-subtext">
         <span>IR Gate: <strong id="val-beam-status" style="color: var(--green-accent);">CLEAR</strong></span>
-        <span>Count: <strong id="val-vehicle-count" style="color: var(--cyan-accent);">18 veh</strong></span>
+        <span>Count: <strong id="val-vehicle-count" style="color: var(--cyan-accent);">0 veh</strong></span>
       </div>
     </div>
 
@@ -1784,12 +1784,13 @@
           if (densNumEl) densNumEl.textContent = `${Math.round(dpct)}%`;
 
           const spdEl = document.getElementById('val-traffic-speed');
+          const spdNum = (t.val !== undefined && t.val !== null) ? Number(t.val) : 0.0;
           const trMs = Number(t.transit_time_ms || 0).toFixed(0);
           if (spdEl) {
-            if (trMs > 0) {
-              spdEl.innerHTML = `${Number(t.val || 50.0).toFixed(1)} km/h <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(${trMs}ms)</span>`;
+            if (spdNum > 0 && trMs > 0) {
+              spdEl.innerHTML = `${spdNum.toFixed(1)} km/h <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(${trMs}ms)</span>`;
             } else {
-              spdEl.textContent = `${Number(t.val || 50.0).toFixed(1)} km/h`;
+              spdEl.textContent = `${spdNum.toFixed(1)} km/h`;
             }
           }
 
